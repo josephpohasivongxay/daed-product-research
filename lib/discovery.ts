@@ -112,6 +112,29 @@ function extractDomainsFromHtml(html: string, linkPattern: RegExp): string[] {
   return domains;
 }
 
+const DDG_BLOCK_PAGE_SIGNS = [
+  'unusual traffic',
+  'automated queries',
+  'detected an anomaly',
+  'let\'s confirm you',
+  'anom-modal',
+];
+
+/**
+ * DuckDuckGo's HTML endpoint returns HTTP 202 (not an error status —
+ * `res.ok` is true for it) when it wants to show an "are you a bot?"
+ * interstitial instead of real results, and shared serverless IPs (like
+ * Vercel's) trip this often. Left unchecked, that interstitial's own
+ * boilerplate links get scraped as if they were search results — the same
+ * handful every time, regardless of query, which looks exactly like
+ * "discovery is broken" from the outside even though the code "succeeded."
+ */
+function looksLikeBlockPage(status: number, html: string): boolean {
+  if (status === 202) return true;
+  const lower = html.toLowerCase();
+  return DDG_BLOCK_PAGE_SIGNS.some((sign) => lower.includes(sign));
+}
+
 async function discoverViaDuckDuckGo(query: string, limit: number): Promise<string[]> {
   const headers = {
     'User-Agent': BROWSER_UA,
@@ -124,8 +147,8 @@ async function discoverViaDuckDuckGo(query: string, limit: number): Promise<stri
       headers,
       signal: AbortSignal.timeout(6000),
     });
-    if (res.ok) {
-      const html = await res.text();
+    const html = await res.text();
+    if (res.ok && !looksLikeBlockPage(res.status, html)) {
       const domains = extractDomainsFromHtml(html, /class="result__a"[^>]*href="([^"]+)"/g);
       const deduped = dedupe(domains, limit);
       if (deduped.length > 0) return deduped;
@@ -139,8 +162,8 @@ async function discoverViaDuckDuckGo(query: string, limit: number): Promise<stri
       headers,
       signal: AbortSignal.timeout(6000),
     });
-    if (res.ok) {
-      const html = await res.text();
+    const html = await res.text();
+    if (res.ok && !looksLikeBlockPage(res.status, html)) {
       const domains = extractDomainsFromHtml(html, /<a[^>]*rel="nofollow"[^>]*href="([^"]+)"/g);
       return dedupe(domains, limit);
     }

@@ -115,26 +115,37 @@ Validated, 75–89 Highly Validated, 60–74 Validated, 40–59 Uncertain, 0–3
   data-driven pricing-cluster gap (`lib/opportunity.ts`); the more subjective gaps (weak
   branding, poor UX) would need either an LLM read of each store or manual review.
 
-## ⚠️ Making live search actually reliable
+## ⚠️ Making live search actually reliable — read this if results look repetitive
 
-Search engines rate-limit or block scraping from shared serverless IPs (like Vercel's), so the
-free DuckDuckGo fallback can go quiet under load and the app silently falls back to sample data
-— you'll see this in the "Sample data (live search unavailable)" label under the search bar.
-**For dependable live search, set at least one of these as environment variables** (in Vercel:
-Project → Settings → Environment Variables):
+**Without `GOOGLE_CSE_KEY`/`GOOGLE_CSE_ID` or `BRAVE_API_KEY` set, this app is not reliable for
+real use.** It'll still run — DuckDuckGo scraping needs no key — but DuckDuckGo actively detects
+and blocks automated traffic from shared serverless IP ranges (like Vercel's). When it does,
+its HTML endpoint returns an "are you a bot?" interstitial page instead of real results — that
+response is still HTTP 202, which `fetch` treats as a normal success, so without a specific
+check for it, the interstitial's own boilerplate links get scraped as if they were search
+results. That produces the same small handful of domains for every query, which looks exactly
+like "the search is broken" from the outside. There's now a guard against the known 202/anomaly
+signals, but this remains a cat-and-mouse game against DuckDuckGo's bot detection — it can
+degrade again at any time, silently.
 
-| Variable | Provider | Free tier |
-| :--- | :--- | :--- |
-| `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` | [Google Programmable Search](https://programmablesearchengine.google.com/) | 100 queries/day |
-| `BRAVE_API_KEY` | [Brave Search API](https://brave.com/search/api/) | Free tier available |
+**Set up one of these** (in Vercel: Project → Settings → Environment Variables, then redeploy):
 
-Either is enough. Note query expansion means each user search can issue up to 5 provider calls
-(fewer if the base query already fails), so a 100/day free tier is roughly 20 user searches/day.
-Discovery pulls up to 30 candidate domains per search (up from an earlier, too-narrow 20) —
-if a niche genuinely has very few relevant stores, a small result count is real signal, not a
-bug; if results look suspiciously identical across different searches, check the label under
-the search bar first — that almost always means live search itself isn't returning anything
-(see above) and the app has silently fallen back to sample data.
+| Variable | Provider | Free tier | Setup |
+| :--- | :--- | :--- | :--- |
+| `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` | Google Programmable Search | 100 queries/day | Create a search engine at [programmablesearchengine.google.com](https://programmablesearchengine.google.com/) (set it to search the entire web), get an API key from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) with the Custom Search API enabled, copy the Search Engine ID from the CSE control panel |
+| `BRAVE_API_KEY` | Brave Search API | Free tier available | Sign up at [brave.com/search/api](https://brave.com/search/api/), grab the key from the dashboard |
+
+Either is enough — the app tries Google first, then Brave, then DuckDuckGo, then sample data.
+**Google is the more reliable pick of the two** for this use case (Brave's free tier has stricter
+rate limits that query expansion can burn through fast).
+
+**How to tell which mode you're in:** the small text under the search bar after a search says
+either "Live search · Google" / "Live search · Brave" / "Live search · DuckDuckGo", or "Sample
+data (live search unavailable)". If it ever says DuckDuckGo and results look suspiciously
+identical across different searches, that's this exact failure mode — the fix is adding a key,
+not debugging the app further. Query expansion means each search can issue up to 5 provider
+calls (fewer if the base query already fails), so a 100/day Google free tier is roughly 20 user
+searches/day. Discovery pulls up to 30 candidate domains per search.
 
 ## Getting started
 
