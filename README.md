@@ -14,11 +14,11 @@ weight than any single number.
 ## How it works
 
 1. You enter a niche keyword (e.g. `portable ice bath`).
-2. The `/api/search` route expands it into a few query variants (`portable ice bath`, `portable
-   ice bath shop`, `portable ice bath buy online`, `"portable ice bath" site:myshopify.com`) and
-   discovers candidate domains via, in order: **Google Custom Search** (if configured) →
-   **Brave Search** (if configured) → a best-effort **DuckDuckGo scrape** → a small sample list
-   if none of those return anything.
+2. The `/api/search` route expands it into a few query variants (`portable ice bath`, `"portable
+   ice bath" shop`, `portable ice bath buy online`, `portable ice bath store`, `"portable ice
+   bath" site:myshopify.com`) and discovers candidate domains via **[Tavily](https://tavily.com)**
+   search, merging and deduping results across variants. Tavily is the sole search provider —
+   see "Search requires Tavily" below for why there's no scraping fallback.
 3. Each candidate is probed live at `https://<domain>/products.json`. Domains that respond with
    a valid Shopify feed are kept as full-data stores. Everything else isn't just discarded — its
    homepage gets a lightweight platform fingerprint check
@@ -115,37 +115,34 @@ Validated, 75–89 Highly Validated, 60–74 Validated, 40–59 Uncertain, 0–3
   data-driven pricing-cluster gap (`lib/opportunity.ts`); the more subjective gaps (weak
   branding, poor UX) would need either an LLM read of each store or manual review.
 
-## ⚠️ Making live search actually reliable — read this if results look repetitive
+## ⚠️ Search requires Tavily — there is no fallback
 
-**Without `GOOGLE_CSE_KEY`/`GOOGLE_CSE_ID` or `BRAVE_API_KEY` set, this app is not reliable for
-real use.** It'll still run — DuckDuckGo scraping needs no key — but DuckDuckGo actively detects
-and blocks automated traffic from shared serverless IP ranges (like Vercel's). When it does,
-its HTML endpoint returns an "are you a bot?" interstitial page instead of real results — that
-response is still HTTP 202, which `fetch` treats as a normal success, so without a specific
-check for it, the interstitial's own boilerplate links get scraped as if they were search
-results. That produces the same small handful of domains for every query, which looks exactly
-like "the search is broken" from the outside. There's now a guard against the known 202/anomaly
-signals, but this remains a cat-and-mouse game against DuckDuckGo's bot detection — it can
-degrade again at any time, silently.
+Discovery went through three providers over this project's history (Google CSE, Brave, a
+DuckDuckGo scrape) and eventually a hardcoded sample-domain fallback for when all three failed.
+That fallback was actively misleading — it silently served the same canned stores regardless of
+what was searched, which is worse than an honest error, so it's gone. **The app now uses only
+[Tavily](https://tavily.com)**, and if it can't be reached, search fails outright with a clear
+"can't connect to Tavily" message instead of ever showing fake data.
 
-**Set up one of these** (in Vercel: Project → Settings → Environment Variables, then redeploy):
+This means `TAVILY_API_KEY` is **required**, not optional. Get one at
+[tavily.com](https://tavily.com) (free tier available) and set it in Vercel: Project → Settings
+→ Environment Variables → redeploy. Locally, copy `.env.example` to `.env.local` and fill it in.
 
-| Variable | Provider | Free tier | Setup |
-| :--- | :--- | :--- | :--- |
-| `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` | Google Programmable Search | 100 queries/day | Create a search engine at [programmablesearchengine.google.com](https://programmablesearchengine.google.com/) (set it to search the entire web), get an API key from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) with the Custom Search API enabled, copy the Search Engine ID from the CSE control panel |
-| `BRAVE_API_KEY` | Brave Search API | Free tier available | Sign up at [brave.com/search/api](https://brave.com/search/api/), grab the key from the dashboard |
+**How to tell if it's working:** the small text under the search bar after a search says "Live
+search · Tavily" on success. If a search instead shows a red error banner saying it can't
+connect, `TAVILY_API_KEY` is missing, invalid, or Tavily itself is unreachable — check the key
+in your deployment's environment variables first.
 
-Either is enough — the app tries Google first, then Brave, then DuckDuckGo, then sample data.
-**Google is the more reliable pick of the two** for this use case (Brave's free tier has stricter
-rate limits that query expansion can burn through fast).
+⚠️ **Caveat:** Tavily's exact response shape couldn't be fully verified end-to-end from this
+build environment — `api.tavily.com` was blocked by this sandbox's network policy, the same
+restriction that affected the Tranco integration earlier. `lib/discovery.ts`'s parsing was built
+from Tavily's documented/GitHub-confirmed shape (`results[].url`) but hasn't been exercised
+against a live response here. If search errors immediately even with a valid key, or returns
+zero results for niches that clearly have stores, that parsing is the first place to check.
 
-**How to tell which mode you're in:** the small text under the search bar after a search says
-either "Live search · Google" / "Live search · Brave" / "Live search · DuckDuckGo", or "Sample
-data (live search unavailable)". If it ever says DuckDuckGo and results look suspiciously
-identical across different searches, that's this exact failure mode — the fix is adding a key,
-not debugging the app further. Query expansion means each search can issue up to 5 provider
-calls (fewer if the base query already fails), so a 100/day Google free tier is roughly 20 user
-searches/day. Discovery pulls up to 30 candidate domains per search.
+Query expansion means each search can issue up to 5 Tavily calls (fewer if the base query
+already fails), so check your Tavily dashboard for how far your plan's quota goes. Discovery
+pulls up to 30 candidate domains per search.
 
 ## Getting started
 
@@ -154,16 +151,16 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Copy `.env.example` to `.env.local` to set
-discovery provider keys locally.
+Open [http://localhost:3000](http://localhost:3000). Copy `.env.example` to `.env.local` and set
+`TAVILY_API_KEY` — search will fail (with a clear error) without it.
 
 ## Deploying to Vercel
 
 1. Push this repo to GitHub.
 2. In [Vercel](https://vercel.com), **Add New Project** → import the repo.
 3. Leave build settings as default (Next.js is auto-detected) and click **Deploy**.
-4. Add `GOOGLE_CSE_KEY` / `GOOGLE_CSE_ID` and/or `BRAVE_API_KEY` as environment variables, then
-   redeploy.
+4. Add `TAVILY_API_KEY` as an environment variable, then redeploy. Search will error clearly
+   until this is set — there's no fallback mode.
 
 Heavier searches (relevance scoring, domain age, popularity, and review lookups per candidate)
 take longer than a plain search — `maxDuration` is set to 45s. If you hit Vercel's function
@@ -185,7 +182,7 @@ components/
 └── SortFilterBar.tsx                    # Sort dropdown + price/product-count/age filters
 lib/
 ├── queryExpansion.ts                      # Mechanical query variant generation
-├── discovery.ts                             # Google CSE / Brave / DuckDuckGo, merged variants
+├── discovery.ts                             # Tavily search, merged query variants
 ├── relevance.ts                               # Lexical product/store relevance scoring
 ├── shopify.ts                                   # products.json fetch, relevance-ranked
 ├── platformDetect.ts                              # Lightweight non-Shopify classification
@@ -202,7 +199,6 @@ lib/
 ├── opportunity.ts                                                      # Pricing-gap analysis
 ├── sortFilter.ts                                                        # Client sort/filter
 ├── format.ts                                                              # Display formatting
-├── sampleDomains.ts                                                        # Discovery fallback
 └── types.ts
 ```
 

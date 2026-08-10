@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { discoverCandidateDomains } from '@/lib/discovery';
+import { discoverCandidateDomains, DiscoveryUnavailableError } from '@/lib/discovery';
 import { fetchShopifyCatalog } from '@/lib/shopify';
 import { fetchDomainAge } from '@/lib/domainAge';
 import { fetchPopularity } from '@/lib/popularity';
@@ -15,7 +15,6 @@ import { computeMarketScore, computeStoreScore } from '@/lib/marketScore';
 import { buildMarketEvidence } from '@/lib/marketEvidence';
 import { generateVerdict } from '@/lib/verdict';
 import { computePricingGap } from '@/lib/opportunity';
-import { SAMPLE_FALLBACK_DOMAINS } from '@/lib/sampleDomains';
 import type { CommunitySource, DemandSignal, Platform, SearchResponse, StoreResult } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -133,12 +132,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    let { domains, source } = await discoverCandidateDomains(niche, CANDIDATE_LIMIT);
-
-    if (domains.length === 0) {
-      domains = SAMPLE_FALLBACK_DOMAINS;
-      source = 'sample_fallback';
-    }
+    const { domains, source } = await discoverCandidateDomains(niche, CANDIDATE_LIMIT);
 
     const [storeChecks, trend, community] = await Promise.all([
       Promise.allSettled(domains.map((d) => buildStoreResult(d, niche))),
@@ -185,6 +179,15 @@ export async function GET(request: Request) {
 
     return NextResponse.json(body);
   } catch (error) {
+    if (error instanceof DiscoveryUnavailableError) {
+      return NextResponse.json(
+        {
+          error:
+            "Can't connect to Tavily search right now. Check that TAVILY_API_KEY is set (and valid) in your deployment's environment variables, then try again.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: 'Failed to fetch niche data' }, { status: 500 });
   }
 }

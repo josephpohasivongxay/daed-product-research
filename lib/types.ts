@@ -167,7 +167,7 @@ export type MarketValidation = {
 export type SearchResponse = {
   success: boolean;
   niche: string;
-  source: 'google_cse' | 'brave' | 'duckduckgo' | 'sample_fallback';
+  source: 'tavily';
   candidatesScanned: number;
   results: StoreResult[];
   demand: DemandSignal;

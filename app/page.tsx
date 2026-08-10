@@ -33,10 +33,7 @@ function saveRecentSearch(niche: string) {
 }
 
 const SOURCE_LABEL: Record<SearchResponse['source'], string> = {
-  google_cse: 'Live search · Google',
-  brave: 'Live search · Brave',
-  duckduckgo: 'Live search · DuckDuckGo',
-  sample_fallback: 'Sample data (live search unavailable)',
+  tavily: 'Live search · Tavily',
 };
 
 export default function Dashboard() {
@@ -204,7 +201,7 @@ export default function Dashboard() {
 
         {!loading && hasSearched && !error && results.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">
-            <p className="text-sm text-slate-400 mb-1">No active Shopify stores verified for this niche.</p>
+            <p className="text-sm text-slate-400 mb-1">No stores with a clear association to this niche were found.</p>
             <p className="text-xs text-slate-600">Try a broader or differently worded keyword.</p>
           </div>
         )}
