@@ -31,3 +31,18 @@ export function formatRank(rank: number): string {
   if (rank <= 100_000) return `Top ${Math.round(rank / 1000)}K sites`;
   return `Top ${(rank / 1_000_000).toFixed(2)}M sites`;
 }
+
+export function formatRevenueRange(low: number, high: number): string {
+  return `${formatCurrency(low)}–${formatCurrency(high)}`;
+}
+
+export function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+  return `${value}`;
+}
+
+export function formatTrafficRange(low: number, high: number | null): string {
+  if (high === null) return `${formatCompactNumber(low)}+`;
+  return `${formatCompactNumber(low)}–${formatCompactNumber(high)}`;
+}

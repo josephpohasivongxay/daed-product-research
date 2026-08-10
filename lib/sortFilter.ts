@@ -70,43 +70,6 @@ function compareNullableNumbers(a: number | null, b: number | null, direction: 1
   return (a - b) * direction;
 }
 
-/**
- * Blends the free signals we have into one "is this worth a look" score:
- * how long the store has been around, how popular its domain is (Tranco),
- * whether it's selling through inventory, how recently it added products,
- * and its rough revenue estimate. None of these alone is reliable, so no
- * single one dominates — this is a ranking heuristic, not a real metric.
- */
-function scoreStore(store: StoreResult): number {
-  let score = 0;
-
-  if (store.domainAge) {
-    score += Math.min(store.domainAge.months / 24, 1) * 30;
-  }
-
-  if (store.popularity?.trancoRank != null) {
-    score += Math.max(0, 1 - store.popularity.trancoRank / 1_000_000) * 25;
-  }
-
-  if (store.soldOutRatio !== null) {
-    score += store.soldOutRatio * 20;
-  }
-
-  if (store.latestProductAt) {
-    const daysSince = (Date.now() - new Date(store.latestProductAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince <= 60) score += 15;
-    else if (daysSince <= 180) score += 8;
-  }
-
-  if (store.revenue) {
-    if (store.revenue.monthly > 50_000) score += 10;
-    else if (store.revenue.monthly > 10_000) score += 6;
-    else if (store.revenue.monthly > 1_000) score += 3;
-  }
-
-  return score;
-}
-
 export function sortStores(stores: StoreResult[], sortBy: SortKey): StoreResult[] {
   if (sortBy === 'relevance') return stores;
 
@@ -115,7 +78,10 @@ export function sortStores(stores: StoreResult[], sortBy: SortKey): StoreResult[
 
   switch (sortBy) {
     case 'recommended':
-      sorted.sort((a, b) => scoreStore(b) - scoreStore(a));
+      // Uses the same 0-100 Market Validation Score shown on each store's
+      // card (server-computed in lib/marketScore.ts), so the ranking and
+      // the badge never disagree with each other.
+      sorted.sort((a, b) => b.score.total - a.score.total);
       break;
     case 'name-asc':
       sorted.sort((a, b) => a.domain.localeCompare(b.domain));
@@ -142,10 +108,10 @@ export function sortStores(stores: StoreResult[], sortBy: SortKey): StoreResult[
       sorted.sort((a, b) => a.productsSample - b.productsSample);
       break;
     case 'revenue-desc':
-      sorted.sort((a, b) => compareNullableNumbers(a.revenue?.monthly ?? null, b.revenue?.monthly ?? null, -1));
+      sorted.sort((a, b) => compareNullableNumbers(a.revenue?.base ?? null, b.revenue?.base ?? null, -1));
       break;
     case 'revenue-asc':
-      sorted.sort((a, b) => compareNullableNumbers(a.revenue?.monthly ?? null, b.revenue?.monthly ?? null, 1));
+      sorted.sort((a, b) => compareNullableNumbers(a.revenue?.base ?? null, b.revenue?.base ?? null, 1));
       break;
     case 'soldout-desc':
       sorted.sort((a, b) => compareNullableNumbers(a.soldOutRatio, b.soldOutRatio, -1));

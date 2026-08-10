@@ -1,6 +1,35 @@
-import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package, Flame, CalendarClock, BarChart2 } from 'lucide-react';
+import {
+  ExternalLink,
+  Megaphone,
+  Music2,
+  Tag,
+  Clock,
+  TrendingUp,
+  Package,
+  Flame,
+  CalendarClock,
+  BarChart2,
+  Star,
+  Target,
+  Users,
+} from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
-import { formatCurrency, formatPriceRange, formatPercent, formatShortDate, formatAge, formatRank } from '@/lib/format';
+import {
+  formatPriceRange,
+  formatPercent,
+  formatShortDate,
+  formatAge,
+  formatRank,
+  formatRevenueRange,
+  formatTrafficRange,
+} from '@/lib/format';
+
+const SCORE_COLOR = (total: number) => {
+  if (total >= 75) return 'text-emerald-400 border-emerald-900 bg-emerald-950/40';
+  if (total >= 60) return 'text-brand-300 border-brand-900 bg-brand-950/40';
+  if (total >= 40) return 'text-amber-400 border-amber-900 bg-amber-950/40';
+  return 'text-slate-400 border-slate-800 bg-slate-900';
+};
 
 export default function StoreCard({ store }: { store: StoreResult }) {
   const catalogLabel = store.catalogSizeIsApproximate
@@ -20,7 +49,16 @@ export default function StoreCard({ store }: { store: StoreResult }) {
             <span className="truncate">{store.domain}</span>
             <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
           </a>
-          <p className="mt-0.5 text-xs text-slate-500">Shopify · {catalogLabel} sampled</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Shopify · {catalogLabel} · {formatPercent(store.relevancePercent / 100)} match to search
+          </p>
+        </div>
+        <div
+          className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-center ${SCORE_COLOR(store.score.total)}`}
+          title="Store Validation Score — blends relevance, reviews, sold-out rate, popularity, domain age, and recent activity"
+        >
+          <div className="text-base font-bold leading-none">{store.score.total}</div>
+          <div className="text-[9px] uppercase tracking-wide opacity-80">/100</div>
         </div>
       </div>
 
@@ -35,6 +73,19 @@ export default function StoreCard({ store }: { store: StoreResult }) {
           <Package className="h-3.5 w-3.5 text-slate-600" />
           {catalogLabel}
         </span>
+        {store.reviews && (store.reviews.reviewCount !== null || store.reviews.rating !== null) && (
+          <span className="inline-flex items-center gap-1" title="From this store's public product-page structured data">
+            <Star className="h-3.5 w-3.5 text-slate-600" />
+            {store.reviews.reviewCount !== null ? `${store.reviews.reviewCount.toLocaleString()} reviews` : ''}
+            {store.reviews.rating !== null ? ` · ${store.reviews.rating.toFixed(1)}★` : ''}
+          </span>
+        )}
+        {store.traffic && (
+          <span className="inline-flex items-center gap-1" title="Estimated tier derived from Tranco rank, not measured traffic">
+            <Users className="h-3.5 w-3.5 text-slate-600" />
+            {formatTrafficRange(store.traffic.monthlyVisitsLow, store.traffic.monthlyVisitsHigh)} visits/mo est.
+          </span>
+        )}
         {store.latestProductAt && (
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3.5 w-3.5 text-slate-600" />
@@ -42,9 +93,12 @@ export default function StoreCard({ store }: { store: StoreResult }) {
           </span>
         )}
         {store.revenue && (
-          <span className="inline-flex items-center gap-1" title="Rough estimate, not real sales data">
+          <span
+            className="inline-flex items-center gap-1"
+            title={`${store.revenue.method} — ${store.revenue.confidence} confidence, not real sales data`}
+          >
             <TrendingUp className="h-3.5 w-3.5 text-slate-600" />
-            ~{formatCurrency(store.revenue.monthly)}/mo est.*
+            {formatRevenueRange(store.revenue.low, store.revenue.high)}/mo est.*
           </span>
         )}
         {store.soldOutRatio !== null && (
@@ -98,6 +152,17 @@ export default function StoreCard({ store }: { store: StoreResult }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {store.topProductUrl && (
+          <a
+            href={store.topProductUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
+          >
+            <Target className="h-3.5 w-3.5" />
+            Top match
+          </a>
+        )}
         <a
           href={store.metaAdLink}
           target="_blank"

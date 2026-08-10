@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Store, PackageSearch, DollarSign, Radar, Loader2 } from 'lucide-react';
+import { Search, Radar, Loader2 } from 'lucide-react';
 import StoreCard from '@/components/StoreCard';
-import StatCard from '@/components/StatCard';
 import SortFilterBar from '@/components/SortFilterBar';
 import DemandPanel from '@/components/DemandPanel';
-import type { CommunitySource, SearchResponse, StoreResult } from '@/lib/types';
+import MarketValidationPanel from '@/components/MarketValidationPanel';
+import type { CommunitySource, SearchResponse } from '@/lib/types';
 import { filterStores, sortStores, DEFAULT_SORT, type FilterState, type SortKey } from '@/lib/sortFilter';
 
 const RECENT_KEY = 'daed_recent_searches';
@@ -30,13 +30,6 @@ function saveRecentSearch(niche: string) {
   const updated = [niche, ...current].slice(0, 6);
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
   return updated;
-}
-
-function avgPrice(results: StoreResult[]): string {
-  const prices = results.map((r) => r.priceStats?.avg).filter((n): n is number => n !== undefined && n !== null);
-  if (prices.length === 0) return '—';
-  const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-  return `$${avg.toFixed(2)}`;
 }
 
 const SOURCE_LABEL: Record<SearchResponse['source'], string> = {
@@ -116,9 +109,10 @@ export default function Dashboard() {
             <Radar className="h-5 w-5 text-brand-400" />
             <span className="text-sm font-semibold tracking-wide text-slate-400">daed</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-50 mb-1">Product Research</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-50 mb-1">Market Intelligence</h1>
           <p className="text-sm text-slate-500 mb-4">
-            Find real Shopify stores in a niche and validate the products they're selling.
+            Search a niche to see who's selling it, how strong the evidence of demand is, and
+            whether the market's worth entering.
           </p>
 
           <form onSubmit={handleSubmit} className="flex gap-2">
@@ -128,7 +122,7 @@ export default function Dashboard() {
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
-                placeholder="Enter a niche, e.g. organic dog shampoo"
+                placeholder="Enter a niche, e.g. portable ice bath"
                 className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2.5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 required
               />
@@ -139,7 +133,7 @@ export default function Dashboard() {
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60 transition shrink-0"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {loading ? 'Scanning' : 'Find stores'}
+              {loading ? 'Scanning' : 'Validate market'}
             </button>
           </form>
 
@@ -184,18 +178,6 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 pt-5">
-        {hasSearched && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <StatCard label="Stores found" value={String(results.length)} icon={Store} />
-            <StatCard
-              label="Products sampled"
-              value={String(results.reduce((sum, r) => sum + r.productsSample, 0))}
-              icon={PackageSearch}
-            />
-            <StatCard label="Avg. price" value={avgPrice(results)} icon={DollarSign} />
-          </div>
-        )}
-
         {error && (
           <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300 mb-6">
             {error}
@@ -208,6 +190,8 @@ export default function Dashboard() {
             {data.candidatesScanned === 1 ? '' : 's'} for &ldquo;{data.niche}&rdquo;
           </p>
         )}
+
+        {data && !error && <MarketValidationPanel market={data.market} niche={data.niche} />}
 
         {data && !error && <DemandPanel demand={data.demand} niche={data.niche} />}
 
@@ -247,8 +231,8 @@ export default function Dashboard() {
 
             {sortBy === 'recommended' && (
               <p className="text-[11px] text-slate-600 -mt-3 mb-4">
-                Recommended blends domain age, popularity, sold-out rate, and recent activity —
-                not just search order.
+                Recommended sorts by each store's Validation Score (the badge on its card) —
+                relevance, reviews, sold-out rate, popularity, and recent activity combined.
               </p>
             )}
 
@@ -266,8 +250,9 @@ export default function Dashboard() {
             )}
 
             <p className="text-[11px] text-slate-600 mt-6">
-              * Est. revenue is a rough heuristic (avg. price × sampled catalog size × an assumed
-              sell-through rate) — not real sales data.
+              * Est. revenue and traffic are rough estimates derived from public signals (Tranco
+              rank, pricing) — not real sales or analytics data. Treat every number here as
+              evidence to investigate further, not a verified fact.
             </p>
           </>
         )}

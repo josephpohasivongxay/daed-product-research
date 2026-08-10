@@ -10,10 +10,14 @@ export type PriceStats = {
   avg: number;
 };
 
+export type RevenueConfidence = 'high' | 'medium' | 'low';
+
 export type RevenueEstimate = {
-  monthly: number;
-  /** 'heuristic' = rough, clearly-labeled guess. 'provider' reserved for a real paid data source. */
-  source: 'heuristic' | 'provider';
+  low: number;
+  base: number;
+  high: number;
+  confidence: RevenueConfidence;
+  method: string;
 };
 
 export type DomainAge = {
@@ -28,6 +32,40 @@ export type Popularity = {
   trancoRank: number | null;
 };
 
+export type TrafficTier = 'very high' | 'high' | 'moderate' | 'low' | 'minimal';
+
+export type TrafficEstimate = {
+  monthlyVisitsLow: number;
+  /** null = open-ended ("1M+"). */
+  monthlyVisitsHigh: number | null;
+  tier: TrafficTier;
+  method: 'tranco-rank-tier';
+};
+
+export type ProductReviews = {
+  rating: number | null;
+  reviewCount: number | null;
+  source: 'json-ld';
+};
+
+export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
+
+export type StoreScoreBreakdown = {
+  demand: number;
+  commercialProof: number;
+  popularity: number;
+  momentum: number;
+  monetization: number;
+};
+
+export type ScoreLabel = 'Extremely Validated' | 'Highly Validated' | 'Validated' | 'Uncertain' | 'Weak';
+
+export type StoreScore = {
+  total: number;
+  breakdown: StoreScoreBreakdown;
+  label: ScoreLabel;
+};
+
 export type StoreResult = {
   domain: string;
   platform: 'shopify';
@@ -35,16 +73,23 @@ export type StoreResult = {
   /** True when the sample hit Shopify's page cap (250) — the real catalog may be larger. */
   catalogSizeIsApproximate: boolean;
   sampleProducts: SampleProduct[];
+  topProductUrl: string | null;
+  /** 0-100 lexical match strength between the catalog and the searched niche. */
+  relevancePercent: number;
+  relevantProductCount: number;
   priceStats: PriceStats | null;
   /** ISO date of the newest `created_at` seen among sampled products. */
   latestProductAt: string | null;
   revenue: RevenueEstimate | null;
+  traffic: TrafficEstimate | null;
+  reviews: ProductReviews | null;
   /** Share of sampled variants marked unavailable — a free proxy for sell-through. */
   soldOutRatio: number | null;
   soldOutVariants: number;
   totalVariants: number;
   domainAge: DomainAge | null;
   popularity: Popularity | null;
+  score: StoreScore;
   metaAdLink: string;
   tiktokAdLink: string;
 };
@@ -75,6 +120,50 @@ export type DemandSignal = {
   community: CommunityMention[];
 };
 
+export type MarketScoreBreakdown = {
+  demand: number;
+  commercialProof: number;
+  competition: number;
+  momentum: number;
+  monetization: number;
+};
+
+export type MarketScore = {
+  total: number;
+  breakdown: MarketScoreBreakdown;
+  label: ScoreLabel;
+};
+
+export type MarketEvidence = {
+  relevantStoreCount: number;
+  highTrafficStoreCount: number;
+  wellReviewedStoreCount: number;
+  typicalPriceRange: PriceStats | null;
+  estimatedCombinedTraffic: { low: number; high: number | null } | null;
+  estimatedMarketRevenue: { low: number; high: number; confidence: RevenueConfidence } | null;
+  platformBreakdown: Partial<Record<Platform, number>>;
+};
+
+export type MarketVerdict = {
+  summary: string;
+  reasons: string[];
+  mainRisk: string;
+  opportunity: string;
+};
+
+export type PricingGap = {
+  clusterLow: PriceStats;
+  clusterHigh: PriceStats | null;
+  note: string;
+};
+
+export type MarketValidation = {
+  score: MarketScore;
+  evidence: MarketEvidence;
+  verdict: MarketVerdict;
+  pricingGap: PricingGap | null;
+};
+
 export type SearchResponse = {
   success: boolean;
   niche: string;
@@ -82,5 +171,6 @@ export type SearchResponse = {
   candidatesScanned: number;
   results: StoreResult[];
   demand: DemandSignal;
+  market: MarketValidation;
   error?: string;
 };

@@ -1,3 +1,5 @@
+import { buildQueryVariants } from './queryExpansion';
+
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -46,12 +48,11 @@ function dedupe(domains: string[], limit: number): string[] {
   return Array.from(new Set(domains)).slice(0, limit);
 }
 
-async function discoverViaGoogleCse(niche: string, limit: number): Promise<string[]> {
+async function discoverViaGoogleCse(query: string, limit: number): Promise<string[]> {
   const key = process.env.GOOGLE_CSE_KEY;
   const cx = process.env.GOOGLE_CSE_ID;
   if (!key || !cx) return [];
 
-  const query = `${niche} shop online store`;
   const endpoint = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(
     key
   )}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(query)}&num=10`;
@@ -68,14 +69,11 @@ async function discoverViaGoogleCse(niche: string, limit: number): Promise<strin
   return dedupe(domains, limit);
 }
 
-async function discoverViaBrave(niche: string, limit: number): Promise<string[]> {
+async function discoverViaBrave(query: string, limit: number): Promise<string[]> {
   const key = process.env.BRAVE_API_KEY;
   if (!key) return [];
 
-  const query = `${niche} shop online store`;
-  const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(
-    query
-  )}&count=10`;
+  const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=10`;
 
   const res = await fetch(endpoint, {
     headers: {
@@ -114,15 +112,13 @@ function extractDomainsFromHtml(html: string, linkPattern: RegExp): string[] {
   return domains;
 }
 
-async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<string[]> {
-  const query = `${niche} shop buy online -site:amazon.com -site:etsy.com -site:ebay.com`;
+async function discoverViaDuckDuckGo(query: string, limit: number): Promise<string[]> {
   const headers = {
     'User-Agent': BROWSER_UA,
     Accept: 'text/html,application/xhtml+xml',
     'Accept-Language': 'en-US,en;q=0.9',
   };
 
-  // Primary: full HTML endpoint
   try {
     const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
       headers,
@@ -138,7 +134,6 @@ async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<stri
     // try lite endpoint next
   }
 
-  // Fallback: lite endpoint, lighter markup, sometimes less aggressively blocked
   try {
     const res = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
       headers,
@@ -157,6 +152,27 @@ async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<stri
 }
 
 /**
+ * Runs the base query through a provider, and — only if that succeeds —
+ * fans the remaining query variants (shop/buy/site:myshopify.com phrasings)
+ * through the same provider in parallel, merging and deduping results.
+ * Variants only fire once we know the provider is working, so a dead
+ * provider (e.g. unconfigured API key, or DDG mid-rate-limit) doesn't burn
+ *4x the requests for nothing.
+ */
+async function discoverWithVariants(
+  variants: string[],
+  fetchOne: (query: string, limit: number) => Promise<string[]>,
+  limit: number
+): Promise<string[]> {
+  const [base, ...rest] = variants;
+  const baseDomains = await fetchOne(base, limit);
+  if (baseDomains.length === 0) return [];
+
+  const extra = await Promise.all(rest.map((q) => fetchOne(q, limit).catch(() => [])));
+  return dedupe([...baseDomains, ...extra.flat()], limit);
+}
+
+/**
  * Discovers candidate store domains for a niche keyword, trying providers in
  * order of reliability: Google Custom Search and Brave Search (official JSON
  * APIs, opt-in via env vars) before a best-effort DuckDuckGo HTML scrape,
@@ -166,10 +182,12 @@ async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<stri
  */
 export async function discoverCandidateDomains(
   niche: string,
-  limit = 12
+  limit = 20
 ): Promise<DiscoveryResult> {
+  const variants = buildQueryVariants(niche);
+
   try {
-    const googleDomains = await discoverViaGoogleCse(niche, limit);
+    const googleDomains = await discoverWithVariants(variants, discoverViaGoogleCse, limit);
     if (googleDomains.length > 0) {
       return { domains: googleDomains, source: 'google_cse' };
     }
@@ -178,7 +196,7 @@ export async function discoverCandidateDomains(
   }
 
   try {
-    const braveDomains = await discoverViaBrave(niche, limit);
+    const braveDomains = await discoverWithVariants(variants, discoverViaBrave, limit);
     if (braveDomains.length > 0) {
       return { domains: braveDomains, source: 'brave' };
     }
@@ -187,7 +205,10 @@ export async function discoverCandidateDomains(
   }
 
   try {
-    const ddgDomains = await discoverViaDuckDuckGo(niche, limit);
+    // Only 2 variants for DDG — each is a scrape, and firing 4 in parallel
+    // at an already rate-limit-prone endpoint is more likely to get the
+    // whole search blocked than to find more candidates.
+    const ddgDomains = await discoverWithVariants(variants.slice(0, 2), discoverViaDuckDuckGo, limit);
     if (ddgDomains.length > 0) {
       return { domains: ddgDomains, source: 'duckduckgo' };
     }

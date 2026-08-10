@@ -1,48 +1,59 @@
-import type { RevenueEstimate } from './types';
+import type { RevenueEstimate, TrafficEstimate } from './types';
 
 /**
- * Store revenue isn't exposed by Shopify's public products.json — real
- * figures require a paid provider (e.g. Store Leads, Koala Inspector,
- * SimilarWeb). This heuristic exists so results can be sorted by "rough
- * size" without paying for one, and is always labeled as an estimate in
- * the UI rather than presented as real data.
+ * Store revenue isn't exposed by Shopify's public products.json, and real
+ * traffic/revenue figures require a paid provider (Store Leads, Koala
+ * Inspector, SimilarWeb). This produces a *range*, never a single number,
+ * using the traffic (visitors) × conversion-rate range × AOV model — and
+ * caps confidence at 'medium' even in the best case, since the traffic
+ * input is a Tranco-rank tier, not measured traffic.
  *
  * To swap in a real provider later: implement a lookup here keyed by
- * domain (e.g. behind a REVENUE_PROVIDER_API_KEY env var) and return
- * `{ monthly, source: 'provider' }` when it succeeds, falling back to
- * this heuristic when it doesn't.
+ * domain (e.g. behind a REVENUE_PROVIDER_API_KEY env var) and return it in
+ * this same {low, base, high, confidence, method} shape — the rest of the
+ * app doesn't care where the numbers came from.
  */
-const ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH = 8;
-
 export type RevenueContext = {
-  trancoRank?: number | null;
-  domainAgeMonths?: number | null;
+  traffic: TrafficEstimate | null;
+  avgPrice: number | null;
+  catalogSize: number;
 };
 
-function popularityMultiplier(trancoRank: number | null | undefined): number {
-  if (trancoRank == null) return 1;
-  if (trancoRank <= 100_000) return 3;
-  if (trancoRank <= 500_000) return 1.5;
-  return 1;
-}
+const CONVERSION_LOW = 0.01;
+const CONVERSION_BASE = 0.02;
+const CONVERSION_HIGH = 0.03;
 
-function maturityMultiplier(domainAgeMonths: number | null | undefined): number {
-  if (domainAgeMonths == null) return 1;
-  // A brand-new store hasn't had time to find real sell-through yet.
-  if (domainAgeMonths < 6) return 0.4;
-  if (domainAgeMonths >= 24) return 1.2;
-  return 1;
-}
+// Only used with zero traffic signal (no Tranco rank at all) — a much
+// weaker last-resort proxy so a store still shows something rather than
+// nothing. Always 'low' confidence.
+const ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH = 8;
 
-export function estimateMonthlyRevenue(
-  avgPrice: number | null,
-  catalogSize: number,
-  context: RevenueContext = {}
-): RevenueEstimate | null {
-  if (avgPrice === null || catalogSize === 0) return null;
+export function estimateMonthlyRevenue(context: RevenueContext): RevenueEstimate | null {
+  const { traffic, avgPrice, catalogSize } = context;
 
-  const multiplier = popularityMultiplier(context.trancoRank) * maturityMultiplier(context.domainAgeMonths);
-  const monthly = avgPrice * catalogSize * ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH * multiplier;
+  if (traffic && avgPrice !== null) {
+    const visitsHigh = traffic.monthlyVisitsHigh ?? traffic.monthlyVisitsLow * 3;
+    const visitsMid = (traffic.monthlyVisitsLow + visitsHigh) / 2;
 
-  return { monthly, source: 'heuristic' };
+    return {
+      low: traffic.monthlyVisitsLow * CONVERSION_LOW * avgPrice,
+      base: visitsMid * CONVERSION_BASE * avgPrice,
+      high: visitsHigh * CONVERSION_HIGH * avgPrice,
+      confidence: 'medium',
+      method: 'Estimated visits (Tranco rank tier) × 1–3% conversion range × avg. relevant-product price',
+    };
+  }
+
+  if (avgPrice !== null && catalogSize > 0) {
+    const base = avgPrice * catalogSize * ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH;
+    return {
+      low: base * 0.4,
+      base,
+      high: base * 2,
+      confidence: 'low',
+      method: 'Catalog size × avg. price × assumed sell-through (no traffic signal available)',
+    };
+  }
+
+  return null;
 }

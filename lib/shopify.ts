@@ -1,15 +1,21 @@
 import type { PriceStats, SampleProduct } from './types';
+import { rankProductsByRelevance, computeStoreRelevancePercent } from './relevance';
 
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 // Shopify's storefront products.json caps out at 250 per page.
 const CATALOG_SAMPLE_LIMIT = 250;
+const RELEVANT_PRODUCT_DISPLAY_COUNT = 4;
 
 type ShopifyVariant = { price?: string; available?: boolean };
 type ShopifyImage = { src?: string };
 type ShopifyProduct = {
   title?: string;
+  body_html?: string;
+  product_type?: string;
+  tags?: string[] | string;
+  handle?: string;
   created_at?: string;
   variants?: ShopifyVariant[];
   images?: ShopifyImage[];
@@ -23,6 +29,10 @@ export type ShopifyCatalogData = {
   productsSample: number;
   catalogSizeIsApproximate: boolean;
   sampleProducts: SampleProduct[];
+  /** Best relevant product page URL, used for review extraction. */
+  topProductUrls: string[];
+  relevancePercent: number;
+  relevantProductCount: number;
   priceStats: PriceStats | null;
   latestProductAt: string | null;
   soldOutRatio: number | null;
@@ -31,6 +41,12 @@ export type ShopifyCatalogData = {
   metaAdLink: string;
   tiktokAdLink: string;
 };
+
+function productTags(product: ShopifyProduct): string[] {
+  if (Array.isArray(product.tags)) return product.tags;
+  if (typeof product.tags === 'string') return product.tags.split(',').map((t) => t.trim());
+  return [];
+}
 
 function computePriceStats(products: ShopifyProduct[]): PriceStats | null {
   const prices = products
@@ -75,10 +91,11 @@ function computeSoldOutStats(products: ShopifyProduct[]): {
 /**
  * Confirms a domain is an active Shopify store by querying its public
  * products.json endpoint, then normalizes its catalog into display and
- * sort/filter-ready stats. Returns null if the domain doesn't respond or
- * isn't Shopify.
+ * sort/filter-ready stats — ranked and filtered by relevance to the
+ * searched niche rather than an arbitrary first-N slice. Returns null if
+ * the domain doesn't respond or isn't Shopify.
  */
-export async function fetchShopifyCatalog(domain: string): Promise<ShopifyCatalogData | null> {
+export async function fetchShopifyCatalog(domain: string, niche: string): Promise<ShopifyCatalogData | null> {
   try {
     const res = await fetch(`https://${domain}/products.json?limit=${CATALOG_SAMPLE_LIMIT}`, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
@@ -94,13 +111,38 @@ export async function fetchShopifyCatalog(domain: string): Promise<ShopifyCatalo
     const products = data.products;
     if (!Array.isArray(products) || products.length === 0) return null;
 
-    const sampleProducts = products.slice(0, 4).map((p) => ({
+    const ranked = rankProductsByRelevance(
+      products.map((p) => ({
+        product: p,
+        title: p.title || '',
+        description: p.body_html || '',
+        productType: p.product_type,
+        tags: productTags(p),
+      })),
+      niche
+    );
+    const { percent: relevancePercent, matchedCount: relevantProductCount } = computeStoreRelevancePercent(
+      ranked.map((r) => ({ score: r.score }))
+    );
+
+    // Prefer relevant products for both display and pricing; fall back to
+    // the raw catalog when nothing matched so the store still shows up
+    // (just ranked low via its relevancePercent) rather than empty-handed.
+    const pricingPool = relevantProductCount > 0 ? ranked.slice(0, relevantProductCount).map((r) => r.item.product) : products;
+    const displayPool = relevantProductCount > 0 ? ranked.map((r) => r.item.product) : products;
+
+    const sampleProducts = displayPool.slice(0, RELEVANT_PRODUCT_DISPLAY_COUNT).map((p) => ({
       title: p.title || 'Untitled product',
       price: p.variants?.[0]?.price || 'N/A',
       image: p.images?.[0]?.src || '',
     }));
 
-    const priceStats = computePriceStats(products);
+    const topProductUrls = displayPool
+      .slice(0, 2)
+      .filter((p) => p.handle)
+      .map((p) => `https://${domain}/products/${p.handle}`);
+
+    const priceStats = computePriceStats(pricingPool);
     const soldOutStats = computeSoldOutStats(products);
 
     return {
@@ -109,6 +151,9 @@ export async function fetchShopifyCatalog(domain: string): Promise<ShopifyCatalo
       productsSample: products.length,
       catalogSizeIsApproximate: products.length >= CATALOG_SAMPLE_LIMIT,
       sampleProducts,
+      topProductUrls,
+      relevancePercent,
+      relevantProductCount,
       priceStats,
       latestProductAt: latestCreatedAt(products),
       soldOutRatio: soldOutStats.ratio,
