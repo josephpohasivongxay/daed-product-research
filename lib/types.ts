@@ -68,7 +68,7 @@ export type StoreScore = {
 
 export type StoreResult = {
   domain: string;
-  platform: 'shopify';
+  platform: Platform;
   productsSample: number;
   /** True when the sample hit Shopify's page cap (250) — the real catalog may be larger. */
   catalogSizeIsApproximate: boolean;

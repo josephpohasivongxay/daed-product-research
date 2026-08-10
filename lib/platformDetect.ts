@@ -1,8 +1,12 @@
-export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
+import type { Platform } from './types';
 
-export type PlatformDetection = {
+export type { Platform };
+
+export type HomepageSignal = {
   platform: Platform;
   confidence: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
 };
 
 const BROWSER_UA =
@@ -17,33 +21,48 @@ const SIGNATURES: { platform: Platform; patterns: RegExp[] }[] = [
   { platform: 'squarespace', patterns: [/squarespace\.com/i, /static1\.squarespace\.com/i] },
 ];
 
+function extractTitle(html: string): string {
+  const match = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  return match ? match[1].trim() : '';
+}
+
+function extractMetaDescription(html: string): string {
+  const match =
+    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+  return match ? match[1].trim() : '';
+}
+
 /**
- * Only called for candidates that already failed the Shopify products.json
- * check — this is classification for market-context ("how many WooCommerce
- * competitors exist too"), not a precursor to full product extraction on
- * other platforms, which would need a separate scraper per platform's data
- * shape and is out of scope for this pass.
+ * Fetches a candidate's homepage once and returns both its platform
+ * fingerprint and enough text (title + meta description) to score its
+ * relevance to the searched niche — used for candidates that fail the
+ * Shopify products.json check, so they aren't just silently dropped.
+ * Full product/price extraction is Shopify-only; this is classification +
+ * a rough relevance read, not a per-platform product scraper.
  */
-export async function detectPlatform(domain: string): Promise<PlatformDetection> {
+export async function fetchHomepageSignal(domain: string): Promise<HomepageSignal> {
   try {
     const res = await fetch(`https://${domain}/`, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html' },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return { platform: 'unknown', confidence: 'low' };
+    if (!res.ok) return { platform: 'unknown', confidence: 'low', title: '', description: '' };
 
     const html = await res.text();
+    const title = extractTitle(html);
+    const description = extractMetaDescription(html);
 
     for (const { platform, patterns } of SIGNATURES) {
       const matches = patterns.filter((p) => p.test(html)).length;
       if (matches > 0) {
-        return { platform, confidence: matches >= 2 ? 'high' : 'medium' };
+        return { platform, confidence: matches >= 2 ? 'high' : 'medium', title, description };
       }
     }
 
     // Real page, no recognized platform fingerprint — likely custom-built.
-    return { platform: 'custom', confidence: 'low' };
+    return { platform: 'custom', confidence: 'low', title, description };
   } catch {
-    return { platform: 'unknown', confidence: 'low' };
+    return { platform: 'unknown', confidence: 'low', title: '', description: '' };
   }
 }

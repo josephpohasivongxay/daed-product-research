@@ -20,10 +20,14 @@ weight than any single number.
    **Brave Search** (if configured) → a best-effort **DuckDuckGo scrape** → a small sample list
    if none of those return anything.
 3. Each candidate is probed live at `https://<domain>/products.json`. Domains that respond with
-   a valid Shopify feed are kept as verified stores; the rest get a lightweight platform
-   fingerprint check (Shopify/WooCommerce/BigCommerce/Magento/Wix/Squarespace/custom/unknown) so
-   the market picture still accounts for non-Shopify competitors, even without extracting their
-   product data.
+   a valid Shopify feed are kept as full-data stores. Everything else isn't just discarded — its
+   homepage gets a lightweight platform fingerprint check
+   (Shopify/WooCommerce/BigCommerce/Magento/Wix/Squarespace/custom/unknown) and a homepage-text
+   relevance read, and if it shows any real association with the niche, it's kept as a **thinner
+   card** (domain, platform, relevance, domain age, popularity — no product/price/review data,
+   since that extraction is Shopify-only). Only candidates with *zero* detected association to
+   the niche are dropped — this is what makes the results a catalog of "every store associated
+   with the keyword," not just whichever ones happen to run Shopify.
 4. Within each store's catalog, products are **scored for relevance** to the searched niche
    (title/type/tags/description matching) — a store that sells 200 unrelated products and
    mentions the niche once won't outrank one whose catalog is built around it. Pricing, sample
@@ -98,9 +102,10 @@ Validated, 75–89 Highly Validated, 60–74 Validated, 40–59 Uncertain, 0–3
   directly to Meta Ads Library / TikTok Creative Center for a manual check.
 - **Social follower counts** (Instagram/TikTok/YouTube). Official APIs need business-account
   auth; public profile scraping is fragile and often JS-rendered. Not attempted.
-- **Full multi-platform product extraction.** WooCommerce/BigCommerce/Magento are *detected* for
-  market context (competitor counts), but full product/price extraction is Shopify-only — each
-  platform has a different data shape and would be a separate build per platform.
+- **Full multi-platform product extraction.** WooCommerce/BigCommerce/Magento stores *do* appear
+  in the results catalog (see "How it works" above), but only with homepage-level relevance —
+  full product/price/review extraction stays Shopify-only, since each platform has a different
+  data shape and would be a separate scraper per platform.
 - **True semantic keyword expansion** (e.g. "red light therapy" → "photobiomodulation"). That
   needs an LLM call, which costs money and breaks this app's free-first design. Query expansion
   here is mechanical (shop/buy/site: phrasings of the exact term), not semantic. A curated
@@ -123,8 +128,13 @@ Project → Settings → Environment Variables):
 | `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` | [Google Programmable Search](https://programmablesearchengine.google.com/) | 100 queries/day |
 | `BRAVE_API_KEY` | [Brave Search API](https://brave.com/search/api/) | Free tier available |
 
-Either is enough. Note query expansion means each user search can issue up to 4 provider calls
-(fewer if the base query already fails), so a 100/day free tier is roughly 25 user searches/day.
+Either is enough. Note query expansion means each user search can issue up to 5 provider calls
+(fewer if the base query already fails), so a 100/day free tier is roughly 20 user searches/day.
+Discovery pulls up to 30 candidate domains per search (up from an earlier, too-narrow 20) —
+if a niche genuinely has very few relevant stores, a small result count is real signal, not a
+bug; if results look suspiciously identical across different searches, check the label under
+the search bar first — that almost always means live search itself isn't returning anything
+(see above) and the app has silently fallen back to sample data.
 
 ## Getting started
 

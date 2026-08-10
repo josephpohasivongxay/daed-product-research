@@ -11,5 +11,11 @@ export function buildQueryVariants(niche: string): string[] {
   const base = niche.trim();
   if (!base) return [];
 
-  return [base, `${base} shop`, `${base} buy online`, `"${base}" site:myshopify.com`];
+  return [
+    base,
+    `"${base}" shop`,
+    `${base} buy online`,
+    `${base} store`,
+    `"${base}" site:myshopify.com`,
+  ];
 }

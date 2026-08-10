@@ -73,7 +73,7 @@ async function discoverViaBrave(query: string, limit: number): Promise<string[]>
   const key = process.env.BRAVE_API_KEY;
   if (!key) return [];
 
-  const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=10`;
+  const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20`;
 
   const res = await fetch(endpoint, {
     headers: {
@@ -182,7 +182,7 @@ async function discoverWithVariants(
  */
 export async function discoverCandidateDomains(
   niche: string,
-  limit = 20
+  limit = 30
 ): Promise<DiscoveryResult> {
   const variants = buildQueryVariants(niche);
 
@@ -205,10 +205,11 @@ export async function discoverCandidateDomains(
   }
 
   try {
-    // Only 2 variants for DDG — each is a scrape, and firing 4 in parallel
-    // at an already rate-limit-prone endpoint is more likely to get the
-    // whole search blocked than to find more candidates.
-    const ddgDomains = await discoverWithVariants(variants.slice(0, 2), discoverViaDuckDuckGo, limit);
+    // Fewer variants for DDG than the API providers — each is a scrape,
+    // and firing too many in parallel at an already rate-limit-prone
+    // endpoint is more likely to get the whole search blocked than to
+    // find more candidates.
+    const ddgDomains = await discoverWithVariants(variants.slice(0, 3), discoverViaDuckDuckGo, limit);
     if (ddgDomains.length > 0) {
       return { domains: ddgDomains, source: 'duckduckgo' };
     }

@@ -12,6 +12,7 @@ import {
   Star,
   Target,
   Users,
+  Info,
 } from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
 import {
@@ -22,6 +23,7 @@ import {
   formatRank,
   formatRevenueRange,
   formatTrafficRange,
+  formatPlatformLabel,
 } from '@/lib/format';
 
 const SCORE_COLOR = (total: number) => {
@@ -32,9 +34,12 @@ const SCORE_COLOR = (total: number) => {
 };
 
 export default function StoreCard({ store }: { store: StoreResult }) {
-  const catalogLabel = store.catalogSizeIsApproximate
-    ? `${store.productsSample}+ products`
-    : `${store.productsSample} product${store.productsSample === 1 ? '' : 's'}`;
+  const hasProductData = store.productsSample > 0;
+  const catalogLabel = hasProductData
+    ? store.catalogSizeIsApproximate
+      ? `${store.productsSample}+ products`
+      : `${store.productsSample} product${store.productsSample === 1 ? '' : 's'}`
+    : 'Limited data';
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
@@ -50,7 +55,8 @@ export default function StoreCard({ store }: { store: StoreResult }) {
             <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
           </a>
           <p className="mt-0.5 text-xs text-slate-500">
-            Shopify · {catalogLabel} · {formatPercent(store.relevancePercent / 100)} match to search
+            {formatPlatformLabel(store.platform)} · {catalogLabel} ·{' '}
+            {formatPercent(store.relevancePercent / 100)} match to search
           </p>
         </div>
         <div
@@ -69,10 +75,20 @@ export default function StoreCard({ store }: { store: StoreResult }) {
             {formatPriceRange(store.priceStats.min, store.priceStats.max)}
           </span>
         )}
-        <span className="inline-flex items-center gap-1">
-          <Package className="h-3.5 w-3.5 text-slate-600" />
-          {catalogLabel}
-        </span>
+        {hasProductData ? (
+          <span className="inline-flex items-center gap-1">
+            <Package className="h-3.5 w-3.5 text-slate-600" />
+            {catalogLabel}
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1"
+            title="Not a Shopify store, so product/price/review data isn't available — relevance is based on the homepage only"
+          >
+            <Info className="h-3.5 w-3.5 text-slate-600" />
+            No product data (non-Shopify)
+          </span>
+        )}
         {store.reviews && (store.reviews.reviewCount !== null || store.reviews.rating !== null) && (
           <span className="inline-flex items-center gap-1" title="From this store's public product-page structured data">
             <Star className="h-3.5 w-3.5 text-slate-600" />
@@ -127,29 +143,31 @@ export default function StoreCard({ store }: { store: StoreResult }) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        {store.sampleProducts.map((p, idx) => (
-          <div key={idx} className="rounded-xl border border-slate-800 bg-slate-950/50 p-2">
-            <div className="aspect-square w-full overflow-hidden rounded-lg bg-slate-800 mb-2">
-              {p.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={p.image}
-                  alt={p.title}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center text-[10px] text-slate-600">
-                  No image
-                </div>
-              )}
+      {store.sampleProducts.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          {store.sampleProducts.map((p, idx) => (
+            <div key={idx} className="rounded-xl border border-slate-800 bg-slate-950/50 p-2">
+              <div className="aspect-square w-full overflow-hidden rounded-lg bg-slate-800 mb-2">
+                {p.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-[10px] text-slate-600">
+                    No image
+                  </div>
+                )}
+              </div>
+              <p className="text-xs font-medium text-slate-200 truncate">{p.title}</p>
+              <p className="text-xs text-slate-500">${p.price}</p>
             </div>
-            <p className="text-xs font-medium text-slate-200 truncate">{p.title}</p>
-            <p className="text-xs text-slate-500">${p.price}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {store.topProductUrl && (

@@ -1,5 +1,6 @@
 import type { PriceStats, SampleProduct } from './types';
 import { rankProductsByRelevance, computeStoreRelevancePercent } from './relevance';
+import { buildAdLinks } from './adLinks';
 
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -159,12 +160,7 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
       soldOutRatio: soldOutStats.ratio,
       soldOutVariants: soldOutStats.soldOut,
       totalVariants: soldOutStats.total,
-      metaAdLink: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&q=${encodeURIComponent(
-        domain
-      )}`,
-      tiktokAdLink: `https://ads.tiktok.com/business/creativecenter/inspiration/popular/ads/pc/en?period=180&keyword=${encodeURIComponent(
-        domain
-      )}`,
+      ...buildAdLinks(domain),
     };
   } catch {
     return null;

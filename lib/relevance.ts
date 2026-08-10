@@ -32,6 +32,23 @@ function scoreText(text: string, phrase: string, words: string[]): number {
   return score;
 }
 
+/**
+ * Weaker evidence than product-catalog matching (one homepage, not many
+ * product listings), used for candidates that aren't Shopify so we can
+ * still tell "genuinely associated with this niche" from "search engine
+ * noise" without full product data.
+ */
+export function scoreHomepageRelevance(title: string, description: string, niche: string): number {
+  const phrase = niche.trim().toLowerCase();
+  const words = tokenize(niche);
+  return scoreText(title, phrase, words) * 2 + scoreText(description, phrase, words);
+}
+
+/** Deliberately capped well below what a real product-catalog match could reach — this is thinner evidence. */
+export function homepageRelevancePercent(score: number): number {
+  return Math.round(Math.min(40, score * 4));
+}
+
 export function scoreProduct(input: RelevanceInput, niche: string): number {
   const phrase = niche.trim().toLowerCase();
   const words = tokenize(niche);

@@ -1,3 +1,20 @@
+import type { Platform } from './types';
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  shopify: 'Shopify',
+  woocommerce: 'WooCommerce',
+  bigcommerce: 'BigCommerce',
+  magento: 'Magento',
+  wix: 'Wix',
+  squarespace: 'Squarespace',
+  custom: 'Custom platform',
+  unknown: 'Unlisted platform',
+};
+
+export function formatPlatformLabel(platform: Platform): string {
+  return PLATFORM_LABELS[platform] ?? platform;
+}
+
 export function formatCurrency(value: number): string {
   if (value >= 1000) {
     return `$${(value / 1000).toFixed(1)}k`;
