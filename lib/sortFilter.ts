@@ -11,7 +11,9 @@ export type SortKey =
   | 'products-desc'
   | 'products-asc'
   | 'revenue-desc'
-  | 'revenue-asc';
+  | 'revenue-asc'
+  | 'soldout-desc'
+  | 'soldout-asc';
 
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'relevance', label: 'Relevance' },
@@ -25,6 +27,8 @@ export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'price-asc', label: 'Lowest avg. price' },
   { value: 'revenue-desc', label: 'Highest est. revenue' },
   { value: 'revenue-asc', label: 'Lowest est. revenue' },
+  { value: 'soldout-desc', label: 'Highest sold-out rate' },
+  { value: 'soldout-asc', label: 'Lowest sold-out rate' },
 ];
 
 export type FilterState = {
@@ -91,6 +95,12 @@ export function sortStores(stores: StoreResult[], sortBy: SortKey): StoreResult[
       break;
     case 'revenue-asc':
       sorted.sort((a, b) => compareNullableNumbers(a.revenue?.monthly ?? null, b.revenue?.monthly ?? null, 1));
+      break;
+    case 'soldout-desc':
+      sorted.sort((a, b) => compareNullableNumbers(a.soldOutRatio, b.soldOutRatio, -1));
+      break;
+    case 'soldout-asc':
+      sorted.sort((a, b) => compareNullableNumbers(a.soldOutRatio, b.soldOutRatio, 1));
       break;
   }
 

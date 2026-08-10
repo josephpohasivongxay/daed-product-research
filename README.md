@@ -20,10 +20,38 @@ Built with Next.js (App Router) + TypeScript + Tailwind, deployable for free on 
    domains that respond with a valid Shopify product feed are kept — this is what actually
    confirms "real, active store," not the search step.
 4. The dashboard renders each verified store as a catalog card (sample products, price range,
-   catalog size, latest product activity, a rough revenue estimate) with direct links to Meta
-   Ad Library and TikTok Creative Center for that domain.
-5. Results can be sorted (name, newest activity, price, catalog size, est. revenue) and
-   filtered (price range, minimum product count) entirely client-side, no extra requests.
+   catalog size, latest product activity, sold-out rate, a rough revenue estimate) with direct
+   links to Meta Ad Library and TikTok Creative Center for that domain.
+5. Results can be sorted (name, newest activity, price, catalog size, sold-out rate, est.
+   revenue) and filtered (price range, minimum product count) entirely client-side, no extra
+   requests.
+6. A **demand signals** panel above the results shows whether search interest in the niche is
+   rising or falling (Google Trends, 12mo) and how much people are organically talking about it
+   on Reddit and/or Hacker News — toggleable per search, so it isn't locked to one community.
+
+## Demand validation signals
+
+Beyond "is this a real store," the dashboard surfaces free signals for "is this actually in
+demand":
+
+- **Sold-out rate** — the share of sampled product variants marked unavailable, computed from
+  data already fetched (no extra request). A store selling through inventory fast is a demand
+  signal; a store that's permanently sold out everywhere may just be a supply problem, so treat
+  it as a prompt to look closer, not a verdict on its own.
+- **Google Trends (12mo)** — search interest over time for the niche keyword, classified as
+  rising / steady / falling. This uses Google's unofficial, undocumented Trends API (the same
+  reverse-engineered `explore` → `widgetdata` flow long-standing libraries like pytrends use).
+  It's free and needs no signup, but — like the DuckDuckGo fallback — it can be rate-limited or
+  break if Google changes the endpoint; when that happens the panel just omits the trend rather
+  than erroring.
+- **Community mentions** — organic mention counts from Reddit's public search and Hacker
+  News' official Algolia search API, shown as toggleable chips ("Check demand in: Reddit /
+  Hacker News") so it isn't locked to a single community. Adding another source (a different
+  forum, subreddit-specific search, etc.) is one function in `lib/community.ts` plus a
+  registration line — nothing else needs to change.
+
+None of these are real revenue or sales data — they're the best free signals available without
+paying for a market-research API, and are labeled in the UI accordingly.
 
 ## ⚠️ Making live search actually reliable
 
@@ -73,14 +101,17 @@ app/
 components/
 ├── StatCard.tsx                # Dashboard stat tiles
 ├── StoreCard.tsx                 # Catalog card per verified store
-└── SortFilterBar.tsx               # Sort dropdown + price/product-count filters
+├── SortFilterBar.tsx               # Sort dropdown + price/product-count filters
+└── DemandPanel.tsx                   # Trend sparkline + community mention chips
 lib/
 ├── discovery.ts                    # Google CSE / Brave / DuckDuckGo domain discovery
 ├── shopify.ts                        # products.json fetch + stats normalization
-├── revenue.ts                          # Pluggable revenue-estimate heuristic
-├── sortFilter.ts                         # Client-side sort/filter logic
-├── format.ts                               # Display formatting helpers
-├── sampleDomains.ts                          # Fallback domains when live discovery fails
+├── trends.ts                           # Google Trends niche interest-over-time signal
+├── community.ts                          # Pluggable Reddit / Hacker News mention counts
+├── revenue.ts                               # Pluggable revenue-estimate heuristic
+├── sortFilter.ts                              # Client-side sort/filter logic
+├── format.ts                                    # Display formatting helpers
+├── sampleDomains.ts                               # Fallback domains when live discovery fails
 └── types.ts
 ```
 

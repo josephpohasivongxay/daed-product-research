@@ -27,8 +27,38 @@ export type StoreResult = {
   /** ISO date of the newest `created_at` seen among sampled products. */
   latestProductAt: string | null;
   revenue: RevenueEstimate | null;
+  /** Share of sampled variants marked unavailable — a free proxy for sell-through. */
+  soldOutRatio: number | null;
+  soldOutVariants: number;
+  totalVariants: number;
   metaAdLink: string;
   tiktokAdLink: string;
+};
+
+export type TrendPoint = {
+  date: string;
+  value: number;
+};
+
+export type TrendSignal = {
+  status: 'rising' | 'steady' | 'falling';
+  points: TrendPoint[];
+};
+
+export type CommunitySource = 'reddit' | 'hackernews';
+
+export type CommunityMention = {
+  source: CommunitySource;
+  label: string;
+  count: number;
+  /** True when `count` hit the provider's result cap — the real total may be higher. */
+  isApproximate: boolean;
+  topUrl: string | null;
+};
+
+export type DemandSignal = {
+  trend: TrendSignal | null;
+  community: CommunityMention[];
 };
 
 export type SearchResponse = {
@@ -37,5 +67,6 @@ export type SearchResponse = {
   source: 'google_cse' | 'brave' | 'duckduckgo' | 'sample_fallback';
   candidatesScanned: number;
   results: StoreResult[];
+  demand: DemandSignal;
   error?: string;
 };

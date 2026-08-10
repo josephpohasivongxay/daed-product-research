@@ -7,7 +7,7 @@ const BROWSER_UA =
 // Shopify's storefront products.json caps out at 250 per page.
 const CATALOG_SAMPLE_LIMIT = 250;
 
-type ShopifyVariant = { price?: string };
+type ShopifyVariant = { price?: string; available?: boolean };
 type ShopifyImage = { src?: string };
 type ShopifyProduct = {
   title?: string;
@@ -40,6 +40,23 @@ function latestCreatedAt(products: ShopifyProduct[]): string | null {
   return new Date(Math.max(...dates)).toISOString();
 }
 
+function computeSoldOutStats(products: ShopifyProduct[]): {
+  ratio: number | null;
+  soldOut: number;
+  total: number;
+} {
+  const variants = products.flatMap((p) => p.variants || []);
+  // `available` isn't guaranteed to be present on every storefront theme's feed.
+  const trackedVariants = variants.filter((v) => typeof v.available === 'boolean');
+
+  if (trackedVariants.length === 0) {
+    return { ratio: null, soldOut: 0, total: 0 };
+  }
+
+  const soldOut = trackedVariants.filter((v) => v.available === false).length;
+  return { ratio: soldOut / trackedVariants.length, soldOut, total: trackedVariants.length };
+}
+
 /**
  * Confirms a domain is an active Shopify store by querying its public
  * products.json endpoint, then normalizes its catalog into display and
@@ -69,6 +86,7 @@ export async function fetchShopifyCatalog(domain: string): Promise<StoreResult |
     }));
 
     const priceStats = computePriceStats(products);
+    const soldOutStats = computeSoldOutStats(products);
 
     return {
       domain,
@@ -79,6 +97,9 @@ export async function fetchShopifyCatalog(domain: string): Promise<StoreResult |
       priceStats,
       latestProductAt: latestCreatedAt(products),
       revenue: estimateMonthlyRevenue(priceStats?.avg ?? null, products.length),
+      soldOutRatio: soldOutStats.ratio,
+      soldOutVariants: soldOutStats.soldOut,
+      totalVariants: soldOutStats.total,
       metaAdLink: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&q=${encodeURIComponent(
         domain
       )}`,

@@ -10,6 +10,10 @@ export function formatPriceRange(min: number, max: number): string {
   return `$${min.toFixed(2)}–$${max.toFixed(2)}`;
 }
 
+export function formatPercent(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
 export function formatShortDate(iso: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
     new Date(iso)

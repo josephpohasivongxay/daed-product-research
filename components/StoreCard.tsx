@@ -1,6 +1,6 @@
-import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package } from 'lucide-react';
+import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package, Flame } from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
-import { formatCurrency, formatPriceRange, formatShortDate } from '@/lib/format';
+import { formatCurrency, formatPriceRange, formatPercent, formatShortDate } from '@/lib/format';
 
 export default function StoreCard({ store }: { store: StoreResult }) {
   const catalogLabel = store.catalogSizeIsApproximate
@@ -45,6 +45,15 @@ export default function StoreCard({ store }: { store: StoreResult }) {
           <span className="inline-flex items-center gap-1" title="Rough estimate, not real sales data">
             <TrendingUp className="h-3.5 w-3.5 text-slate-600" />
             ~{formatCurrency(store.revenue.monthly)}/mo est.*
+          </span>
+        )}
+        {store.soldOutRatio !== null && (
+          <span
+            className="inline-flex items-center gap-1"
+            title={`${store.soldOutVariants} of ${store.totalVariants} sampled variants unavailable — may signal strong sell-through or slow restocking`}
+          >
+            <Flame className="h-3.5 w-3.5 text-slate-600" />
+            {formatPercent(store.soldOutRatio)} sold out
           </span>
         )}
       </div>

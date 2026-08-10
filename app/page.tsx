@@ -5,10 +5,16 @@ import { Search, Store, PackageSearch, DollarSign, Radar, Loader2 } from 'lucide
 import StoreCard from '@/components/StoreCard';
 import StatCard from '@/components/StatCard';
 import SortFilterBar from '@/components/SortFilterBar';
-import type { SearchResponse, StoreResult } from '@/lib/types';
+import DemandPanel from '@/components/DemandPanel';
+import type { CommunitySource, SearchResponse, StoreResult } from '@/lib/types';
 import { filterStores, sortStores, type FilterState, type SortKey } from '@/lib/sortFilter';
 
 const RECENT_KEY = 'daed_recent_searches';
+
+const COMMUNITY_OPTIONS: { value: CommunitySource; label: string }[] = [
+  { value: 'reddit', label: 'Reddit' },
+  { value: 'hackernews', label: 'Hacker News' },
+];
 
 function loadRecentSearches(): string[] {
   if (typeof window === 'undefined') return [];
@@ -49,10 +55,17 @@ export default function Dashboard() {
   const [hasSearched, setHasSearched] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>('relevance');
   const [filters, setFilters] = useState<FilterState>({});
+  const [communitySources, setCommunitySources] = useState<CommunitySource[]>(['reddit', 'hackernews']);
 
   useEffect(() => {
     setRecent(loadRecentSearches());
   }, []);
+
+  function toggleCommunitySource(source: CommunitySource) {
+    setCommunitySources((current) =>
+      current.includes(source) ? current.filter((s) => s !== source) : [...current, source]
+    );
+  }
 
   async function runSearch(term: string) {
     const trimmed = term.trim();
@@ -65,7 +78,8 @@ export default function Dashboard() {
     setFilters({});
 
     try {
-      const res = await fetch(`/api/search?niche=${encodeURIComponent(trimmed)}`);
+      const params = new URLSearchParams({ niche: trimmed, community: communitySources.join(',') });
+      const res = await fetch(`/api/search?${params.toString()}`);
       const json = await res.json();
 
       if (!res.ok) {
@@ -129,6 +143,27 @@ export default function Dashboard() {
             </button>
           </form>
 
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-slate-600">Check demand in:</span>
+            {COMMUNITY_OPTIONS.map((opt) => {
+              const active = communitySources.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => toggleCommunitySource(opt.value)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+                    active
+                      ? 'border-brand-500 bg-brand-600/20 text-brand-300'
+                      : 'border-slate-800 bg-slate-900 text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
           {recent.length > 0 && (
             <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-none">
               {recent.map((term) => (
@@ -173,6 +208,8 @@ export default function Dashboard() {
             {data.candidatesScanned === 1 ? '' : 's'} for &ldquo;{data.niche}&rdquo;
           </p>
         )}
+
+        {data && !error && <DemandPanel demand={data.demand} niche={data.niche} />}
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 text-slate-500">

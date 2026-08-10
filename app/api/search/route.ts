@@ -1,15 +1,26 @@
 import { NextResponse } from 'next/server';
 import { discoverCandidateDomains } from '@/lib/discovery';
 import { fetchShopifyCatalog } from '@/lib/shopify';
+import { fetchTrendSignal } from '@/lib/trends';
+import { ALL_COMMUNITY_SOURCES, fetchCommunityMentions } from '@/lib/community';
 import { SAMPLE_FALLBACK_DOMAINS } from '@/lib/sampleDomains';
-import type { SearchResponse } from '@/lib/types';
+import type { CommunitySource, SearchResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+function parseCommunitySources(raw: string | null): CommunitySource[] {
+  if (raw === null) return ALL_COMMUNITY_SOURCES;
+  if (raw.trim() === '') return [];
+
+  const requested = raw.split(',').map((s) => s.trim());
+  return ALL_COMMUNITY_SOURCES.filter((source) => requested.includes(source));
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const niche = searchParams.get('niche')?.trim();
+  const communitySources = parseCommunitySources(searchParams.get('community'));
 
   if (!niche) {
     return NextResponse.json({ error: 'Niche keyword is required' }, { status: 400 });
@@ -23,7 +34,11 @@ export async function GET(request: Request) {
       source = 'sample_fallback';
     }
 
-    const catalogChecks = await Promise.allSettled(domains.map(fetchShopifyCatalog));
+    const [catalogChecks, trend, community] = await Promise.all([
+      Promise.allSettled(domains.map(fetchShopifyCatalog)),
+      fetchTrendSignal(niche),
+      fetchCommunityMentions(niche, communitySources),
+    ]);
 
     const results = catalogChecks
       .filter(
@@ -38,6 +53,7 @@ export async function GET(request: Request) {
       source,
       candidatesScanned: domains.length,
       results,
+      demand: { trend, community },
     };
 
     return NextResponse.json(body);
