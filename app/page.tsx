@@ -7,7 +7,7 @@ import StatCard from '@/components/StatCard';
 import SortFilterBar from '@/components/SortFilterBar';
 import DemandPanel from '@/components/DemandPanel';
 import type { CommunitySource, SearchResponse, StoreResult } from '@/lib/types';
-import { filterStores, sortStores, type FilterState, type SortKey } from '@/lib/sortFilter';
+import { filterStores, sortStores, DEFAULT_SORT, type FilterState, type SortKey } from '@/lib/sortFilter';
 
 const RECENT_KEY = 'daed_recent_searches';
 
@@ -53,7 +53,7 @@ export default function Dashboard() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const [sortBy, setSortBy] = useState<SortKey>('relevance');
+  const [sortBy, setSortBy] = useState<SortKey>(DEFAULT_SORT);
   const [filters, setFilters] = useState<FilterState>({});
   const [communitySources, setCommunitySources] = useState<CommunitySource[]>(['reddit', 'hackernews']);
 
@@ -74,7 +74,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
-    setSortBy('relevance');
+    setSortBy(DEFAULT_SORT);
     setFilters({});
 
     try {
@@ -244,6 +244,13 @@ export default function Dashboard() {
               onFiltersChange={setFilters}
               resultCount={visibleResults.length}
             />
+
+            {sortBy === 'recommended' && (
+              <p className="text-[11px] text-slate-600 -mt-3 mb-4">
+                Recommended blends domain age, popularity, sold-out rate, and recent activity —
+                not just search order.
+              </p>
+            )}
 
             {visibleResults.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">

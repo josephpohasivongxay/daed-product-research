@@ -20,11 +20,14 @@ Built with Next.js (App Router) + TypeScript + Tailwind, deployable for free on 
    domains that respond with a valid Shopify product feed are kept — this is what actually
    confirms "real, active store," not the search step.
 4. The dashboard renders each verified store as a catalog card (sample products, price range,
-   catalog size, latest product activity, sold-out rate, a rough revenue estimate) with direct
-   links to Meta Ad Library and TikTok Creative Center for that domain.
-5. Results can be sorted (name, newest activity, price, catalog size, sold-out rate, est.
-   revenue) and filtered (price range, minimum product count) entirely client-side, no extra
-   requests.
+   catalog size, latest product activity, sold-out rate, domain age, popularity rank, a rough
+   revenue estimate) with direct links to Meta Ad Library and TikTok Creative Center.
+5. Results default to a **Recommended** ranking — a blend of domain age, popularity, sold-out
+   rate, and recent activity — instead of raw search order, so established/trending/selling
+   stores surface first rather than whatever order the search step happened to return. Results
+   can also be sorted by name, date, price, catalog size, sold-out rate, or est. revenue, and
+   filtered by price range, minimum product count, or "established only" (6mo+ domain age) —
+   entirely client-side, no extra requests.
 6. A **demand signals** panel above the results shows whether search interest in the niche is
    rising or falling (Google Trends, 12mo) and how much people are organically talking about it
    on Reddit and/or Hacker News — toggleable per search, so it isn't locked to one community.
@@ -52,6 +55,30 @@ demand":
 
 None of these are real revenue or sales data — they're the best free signals available without
 paying for a market-research API, and are labeled in the UI accordingly.
+
+## Ranking: domain age, popularity, and "recommended"
+
+To avoid surfacing stores in arbitrary search order, each verified store also gets:
+
+- **Domain age** — via [RDAP](https://about.rdap.org/) (the IETF-standardized, structured-JSON
+  replacement for WHOIS), using `rdap.org`'s free bootstrap redirector to reach the domain's
+  authoritative registry. Falls back to the Wayback Machine's first successful capture date
+  when RDAP doesn't cover a TLD or a registrar's privacy proxy hides the registration date —
+  both free, official, no signup. This directly answers "has this store been around a while,"
+  and backs the "Established only" filter.
+- **Popularity (Tranco rank)** — [Tranco](https://tranco-list.eu/) is a free, research-grade
+  top-1M domain ranking (the modern, non-defunct replacement for Alexa rank), used as a "most
+  viewed" proxy without a paid traffic API. ⚠️ **Caveat:** this integration's exact response
+  shape couldn't be verified against live docs from this build environment (network policy
+  blocked reaching `tranco-list.eu`), so parsing is deliberately lenient and, like the other
+  best-effort signals, fails to `null` safely rather than breaking search — but it may need a
+  follow-up fix once tested against the real API on a live deploy. Worth checking `lib/popularity.ts`
+  first if store cards never show a popularity rank.
+- **Recommended sort** (`lib/sortFilter.ts`) combines domain age + Tranco rank + sold-out rate
+  + recent catalog activity + est. revenue into one score, and is the default ordering. The
+  revenue heuristic itself is also weighted by domain age and Tranco rank (older + more popular
+  → higher assumed sell-through), so "projected sales" leans toward stores that look established
+  and trending rather than being a flat guess for every store alike.
 
 ## ⚠️ Making live search actually reliable
 
@@ -106,12 +133,14 @@ components/
 lib/
 ├── discovery.ts                    # Google CSE / Brave / DuckDuckGo domain discovery
 ├── shopify.ts                        # products.json fetch + stats normalization
-├── trends.ts                           # Google Trends niche interest-over-time signal
-├── community.ts                          # Pluggable Reddit / Hacker News mention counts
-├── revenue.ts                               # Pluggable revenue-estimate heuristic
-├── sortFilter.ts                              # Client-side sort/filter logic
-├── format.ts                                    # Display formatting helpers
-├── sampleDomains.ts                               # Fallback domains when live discovery fails
+├── domainAge.ts                        # RDAP + Wayback Machine domain-age signal
+├── popularity.ts                         # Tranco popularity rank (best-effort)
+├── trends.ts                               # Google Trends niche interest-over-time signal
+├── community.ts                              # Pluggable Reddit / Hacker News mention counts
+├── revenue.ts                                   # Pluggable, age/popularity-weighted revenue heuristic
+├── sortFilter.ts                                  # Recommended ranking + client-side sort/filter
+├── format.ts                                        # Display formatting helpers
+├── sampleDomains.ts                                   # Fallback domains when live discovery fails
 └── types.ts
 ```
 

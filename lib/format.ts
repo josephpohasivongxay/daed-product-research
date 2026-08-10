@@ -19,3 +19,15 @@ export function formatShortDate(iso: string): string {
     new Date(iso)
   );
 }
+
+export function formatAge(months: number): string {
+  if (months < 12) return `${months}mo old`;
+  const years = months / 12;
+  return `${years.toFixed(years < 10 ? 1 : 0)}y old`;
+}
+
+export function formatRank(rank: number): string {
+  if (rank <= 1000) return `Top ${rank.toLocaleString()} sites`;
+  if (rank <= 100_000) return `Top ${Math.round(rank / 1000)}K sites`;
+  return `Top ${(rank / 1_000_000).toFixed(2)}M sites`;
+}

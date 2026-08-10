@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { discoverCandidateDomains } from '@/lib/discovery';
 import { fetchShopifyCatalog } from '@/lib/shopify';
+import { fetchDomainAge } from '@/lib/domainAge';
+import { fetchPopularity } from '@/lib/popularity';
+import { estimateMonthlyRevenue } from '@/lib/revenue';
 import { fetchTrendSignal } from '@/lib/trends';
 import { ALL_COMMUNITY_SOURCES, fetchCommunityMentions } from '@/lib/community';
 import { SAMPLE_FALLBACK_DOMAINS } from '@/lib/sampleDomains';
-import type { CommunitySource, SearchResponse } from '@/lib/types';
+import type { CommunitySource, SearchResponse, StoreResult } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -15,6 +18,23 @@ function parseCommunitySources(raw: string | null): CommunitySource[] {
 
   const requested = raw.split(',').map((s) => s.trim());
   return ALL_COMMUNITY_SOURCES.filter((source) => requested.includes(source));
+}
+
+async function buildStoreResult(domain: string): Promise<StoreResult | null> {
+  const [catalog, domainAge, popularity] = await Promise.all([
+    fetchShopifyCatalog(domain),
+    fetchDomainAge(domain),
+    fetchPopularity(domain),
+  ]);
+
+  if (!catalog) return null;
+
+  const revenue = estimateMonthlyRevenue(catalog.priceStats?.avg ?? null, catalog.productsSample, {
+    trancoRank: popularity?.trancoRank ?? null,
+    domainAgeMonths: domainAge?.months ?? null,
+  });
+
+  return { ...catalog, domainAge, popularity, revenue };
 }
 
 export async function GET(request: Request) {
@@ -34,16 +54,15 @@ export async function GET(request: Request) {
       source = 'sample_fallback';
     }
 
-    const [catalogChecks, trend, community] = await Promise.all([
-      Promise.allSettled(domains.map(fetchShopifyCatalog)),
+    const [storeChecks, trend, community] = await Promise.all([
+      Promise.allSettled(domains.map(buildStoreResult)),
       fetchTrendSignal(niche),
       fetchCommunityMentions(niche, communitySources),
     ]);
 
-    const results = catalogChecks
+    const results = storeChecks
       .filter(
-        (r): r is PromiseFulfilledResult<NonNullable<Awaited<ReturnType<typeof fetchShopifyCatalog>>>> =>
-          r.status === 'fulfilled' && r.value !== null
+        (r): r is PromiseFulfilledResult<StoreResult> => r.status === 'fulfilled' && r.value !== null
       )
       .map((r) => r.value);
 

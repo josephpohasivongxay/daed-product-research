@@ -16,6 +16,18 @@ export type RevenueEstimate = {
   source: 'heuristic' | 'provider';
 };
 
+export type DomainAge = {
+  firstSeenDate: string;
+  months: number;
+  /** 'rdap' = real registration date. 'wayback' = first archive.org capture, a lower-bound proxy. */
+  source: 'rdap' | 'wayback';
+};
+
+export type Popularity = {
+  /** Tranco top-1M rank; null when the domain isn't ranked (best-effort, may be unavailable). */
+  trancoRank: number | null;
+};
+
 export type StoreResult = {
   domain: string;
   platform: 'shopify';
@@ -31,6 +43,8 @@ export type StoreResult = {
   soldOutRatio: number | null;
   soldOutVariants: number;
   totalVariants: number;
+  domainAge: DomainAge | null;
+  popularity: Popularity | null;
   metaAdLink: string;
   tiktokAdLink: string;
 };

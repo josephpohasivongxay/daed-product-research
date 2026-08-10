@@ -1,6 +1,6 @@
-import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package, Flame } from 'lucide-react';
+import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package, Flame, CalendarClock, BarChart2 } from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
-import { formatCurrency, formatPriceRange, formatPercent, formatShortDate } from '@/lib/format';
+import { formatCurrency, formatPriceRange, formatPercent, formatShortDate, formatAge, formatRank } from '@/lib/format';
 
 export default function StoreCard({ store }: { store: StoreResult }) {
   const catalogLabel = store.catalogSizeIsApproximate
@@ -54,6 +54,21 @@ export default function StoreCard({ store }: { store: StoreResult }) {
           >
             <Flame className="h-3.5 w-3.5 text-slate-600" />
             {formatPercent(store.soldOutRatio)} sold out
+          </span>
+        )}
+        {store.domainAge && (
+          <span
+            className="inline-flex items-center gap-1"
+            title={store.domainAge.source === 'rdap' ? 'Domain registration age' : 'First seen in the Wayback Machine (lower bound)'}
+          >
+            <CalendarClock className="h-3.5 w-3.5 text-slate-600" />
+            {formatAge(store.domainAge.months)}
+          </span>
+        )}
+        {store.popularity?.trancoRank != null && (
+          <span className="inline-flex items-center gap-1" title="Tranco domain popularity rank">
+            <BarChart2 className="h-3.5 w-3.5 text-slate-600" />
+            {formatRank(store.popularity.trancoRank)}
           </span>
         )}
       </div>

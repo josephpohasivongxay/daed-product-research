@@ -1,5 +1,4 @@
-import type { PriceStats, StoreResult } from './types';
-import { estimateMonthlyRevenue } from './revenue';
+import type { PriceStats, SampleProduct } from './types';
 
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -16,6 +15,22 @@ type ShopifyProduct = {
   images?: ShopifyImage[];
 };
 type ShopifyProductsResponse = { products?: ShopifyProduct[] };
+
+/** Catalog data derived purely from products.json — no domain age / popularity yet. */
+export type ShopifyCatalogData = {
+  domain: string;
+  platform: 'shopify';
+  productsSample: number;
+  catalogSizeIsApproximate: boolean;
+  sampleProducts: SampleProduct[];
+  priceStats: PriceStats | null;
+  latestProductAt: string | null;
+  soldOutRatio: number | null;
+  soldOutVariants: number;
+  totalVariants: number;
+  metaAdLink: string;
+  tiktokAdLink: string;
+};
 
 function computePriceStats(products: ShopifyProduct[]): PriceStats | null {
   const prices = products
@@ -63,7 +78,7 @@ function computeSoldOutStats(products: ShopifyProduct[]): {
  * sort/filter-ready stats. Returns null if the domain doesn't respond or
  * isn't Shopify.
  */
-export async function fetchShopifyCatalog(domain: string): Promise<StoreResult | null> {
+export async function fetchShopifyCatalog(domain: string): Promise<ShopifyCatalogData | null> {
   try {
     const res = await fetch(`https://${domain}/products.json?limit=${CATALOG_SAMPLE_LIMIT}`, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
@@ -96,7 +111,6 @@ export async function fetchShopifyCatalog(domain: string): Promise<StoreResult |
       sampleProducts,
       priceStats,
       latestProductAt: latestCreatedAt(products),
-      revenue: estimateMonthlyRevenue(priceStats?.avg ?? null, products.length),
       soldOutRatio: soldOutStats.ratio,
       soldOutVariants: soldOutStats.soldOut,
       totalVariants: soldOutStats.total,

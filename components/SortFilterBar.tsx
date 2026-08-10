@@ -97,6 +97,16 @@ export default function SortFilterBar({
             />
           </label>
 
+          <label className="col-span-3 mt-1 inline-flex items-center gap-2 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={filters.establishedOnly ?? false}
+              onChange={(e) => onFiltersChange({ ...filters, establishedOnly: e.target.checked || undefined })}
+              className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-950 accent-brand-600"
+            />
+            Established only (6mo+ domain age)
+          </label>
+
           {activeFilterCount > 0 && (
             <button
               onClick={() => onFiltersChange({})}

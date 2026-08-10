@@ -14,12 +14,35 @@ import type { RevenueEstimate } from './types';
  */
 const ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH = 8;
 
+export type RevenueContext = {
+  trancoRank?: number | null;
+  domainAgeMonths?: number | null;
+};
+
+function popularityMultiplier(trancoRank: number | null | undefined): number {
+  if (trancoRank == null) return 1;
+  if (trancoRank <= 100_000) return 3;
+  if (trancoRank <= 500_000) return 1.5;
+  return 1;
+}
+
+function maturityMultiplier(domainAgeMonths: number | null | undefined): number {
+  if (domainAgeMonths == null) return 1;
+  // A brand-new store hasn't had time to find real sell-through yet.
+  if (domainAgeMonths < 6) return 0.4;
+  if (domainAgeMonths >= 24) return 1.2;
+  return 1;
+}
+
 export function estimateMonthlyRevenue(
   avgPrice: number | null,
-  catalogSize: number
+  catalogSize: number,
+  context: RevenueContext = {}
 ): RevenueEstimate | null {
   if (avgPrice === null || catalogSize === 0) return null;
 
-  const monthly = avgPrice * catalogSize * ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH;
+  const multiplier = popularityMultiplier(context.trancoRank) * maturityMultiplier(context.domainAgeMonths);
+  const monthly = avgPrice * catalogSize * ASSUMED_UNITS_SOLD_PER_SKU_PER_MONTH * multiplier;
+
   return { monthly, source: 'heuristic' };
 }
