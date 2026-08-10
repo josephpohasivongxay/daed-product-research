@@ -1,10 +1,15 @@
-import { ExternalLink, Megaphone, Music2 } from 'lucide-react';
+import { ExternalLink, Megaphone, Music2, Tag, Clock, TrendingUp, Package } from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
+import { formatCurrency, formatPriceRange, formatShortDate } from '@/lib/format';
 
 export default function StoreCard({ store }: { store: StoreResult }) {
+  const catalogLabel = store.catalogSizeIsApproximate
+    ? `${store.productsSample}+ products`
+    : `${store.productsSample} product${store.productsSample === 1 ? '' : 's'}`;
+
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <a
             href={`https://${store.domain}`}
@@ -15,10 +20,33 @@ export default function StoreCard({ store }: { store: StoreResult }) {
             <span className="truncate">{store.domain}</span>
             <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
           </a>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Shopify · {store.productsSample} product{store.productsSample === 1 ? '' : 's'} sampled
-          </p>
+          <p className="mt-0.5 text-xs text-slate-500">Shopify · {catalogLabel} sampled</p>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4 text-xs text-slate-400">
+        {store.priceStats && (
+          <span className="inline-flex items-center gap-1">
+            <Tag className="h-3.5 w-3.5 text-slate-600" />
+            {formatPriceRange(store.priceStats.min, store.priceStats.max)}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1">
+          <Package className="h-3.5 w-3.5 text-slate-600" />
+          {catalogLabel}
+        </span>
+        {store.latestProductAt && (
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3.5 w-3.5 text-slate-600" />
+            Latest drop {formatShortDate(store.latestProductAt)}
+          </span>
+        )}
+        {store.revenue && (
+          <span className="inline-flex items-center gap-1" title="Rough estimate, not real sales data">
+            <TrendingUp className="h-3.5 w-3.5 text-slate-600" />
+            ~{formatCurrency(store.revenue.monthly)}/mo est.*
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">

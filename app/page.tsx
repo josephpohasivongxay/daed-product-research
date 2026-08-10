@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Store, PackageSearch, DollarSign, Radar, Loader2 } from 'lucide-react';
 import StoreCard from '@/components/StoreCard';
 import StatCard from '@/components/StatCard';
+import SortFilterBar from '@/components/SortFilterBar';
 import type { SearchResponse, StoreResult } from '@/lib/types';
+import { filterStores, sortStores, type FilterState, type SortKey } from '@/lib/sortFilter';
 
 const RECENT_KEY = 'daed_recent_searches';
 
@@ -25,9 +27,7 @@ function saveRecentSearch(niche: string) {
 }
 
 function avgPrice(results: StoreResult[]): string {
-  const prices = results
-    .flatMap((r) => r.sampleProducts.map((p) => parseFloat(p.price)))
-    .filter((n) => !Number.isNaN(n));
+  const prices = results.map((r) => r.priceStats?.avg).filter((n): n is number => n !== undefined && n !== null);
   if (prices.length === 0) return '—';
   const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
   return `$${avg.toFixed(2)}`;
@@ -35,6 +35,7 @@ function avgPrice(results: StoreResult[]): string {
 
 const SOURCE_LABEL: Record<SearchResponse['source'], string> = {
   google_cse: 'Live search · Google',
+  brave: 'Live search · Brave',
   duckduckgo: 'Live search · DuckDuckGo',
   sample_fallback: 'Sample data (live search unavailable)',
 };
@@ -46,6 +47,8 @@ export default function Dashboard() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>('relevance');
+  const [filters, setFilters] = useState<FilterState>({});
 
   useEffect(() => {
     setRecent(loadRecentSearches());
@@ -58,6 +61,8 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setSortBy('relevance');
+    setFilters({});
 
     try {
       const res = await fetch(`/api/search?niche=${encodeURIComponent(trimmed)}`);
@@ -84,6 +89,10 @@ export default function Dashboard() {
   }
 
   const results = data?.results || [];
+  const visibleResults = useMemo(
+    () => sortStores(filterStores(results, filters), sortBy),
+    [results, filters, sortBy]
+  );
 
   return (
     <main className="min-h-screen pb-16">
@@ -145,7 +154,7 @@ export default function Dashboard() {
             <StatCard label="Stores found" value={String(results.length)} icon={Store} />
             <StatCard
               label="Products sampled"
-              value={String(results.reduce((sum, r) => sum + r.sampleProducts.length, 0))}
+              value={String(results.reduce((sum, r) => sum + r.productsSample, 0))}
               icon={PackageSearch}
             />
             <StatCard label="Avg. price" value={avgPrice(results)} icon={DollarSign} />
@@ -190,11 +199,33 @@ export default function Dashboard() {
         )}
 
         {!loading && results.length > 0 && (
-          <div className="grid gap-4">
-            {results.map((store) => (
-              <StoreCard key={store.domain} store={store} />
-            ))}
-          </div>
+          <>
+            <SortFilterBar
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              filters={filters}
+              onFiltersChange={setFilters}
+              resultCount={visibleResults.length}
+            />
+
+            {visibleResults.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">
+                <p className="text-sm text-slate-400 mb-1">No stores match these filters.</p>
+                <p className="text-xs text-slate-600">Try widening your price or product-count range.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {visibleResults.map((store) => (
+                  <StoreCard key={store.domain} store={store} />
+                ))}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-600 mt-6">
+              * Est. revenue is a rough heuristic (avg. price × sampled catalog size × an assumed
+              sell-through rate) — not real sales data.
+            </p>
+          </>
         )}
       </div>
     </main>

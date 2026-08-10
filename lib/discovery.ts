@@ -16,9 +16,12 @@ const BLOCKED_HOSTS = new Set([
   'twitter.com',
   'x.com',
   'tiktok.com',
+  'duckduckgo.com',
+  'bing.com',
+  'google.com',
 ]);
 
-export type DiscoverySource = 'google_cse' | 'duckduckgo' | 'sample_fallback';
+export type DiscoverySource = 'google_cse' | 'brave' | 'duckduckgo' | 'sample_fallback';
 
 export type DiscoveryResult = {
   domains: string[];
@@ -65,45 +68,101 @@ async function discoverViaGoogleCse(niche: string, limit: number): Promise<strin
   return dedupe(domains, limit);
 }
 
-async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<string[]> {
-  const query = `${niche} shop buy online -site:amazon.com -site:etsy.com -site:ebay.com`;
-  const endpoint = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+async function discoverViaBrave(niche: string, limit: number): Promise<string[]> {
+  const key = process.env.BRAVE_API_KEY;
+  if (!key) return [];
+
+  const query = `${niche} shop online store`;
+  const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(
+    query
+  )}&count=10`;
 
   const res = await fetch(endpoint, {
     headers: {
-      'User-Agent': BROWSER_UA,
-      Accept: 'text/html',
+      Accept: 'application/json',
+      'X-Subscription-Token': key,
     },
     signal: AbortSignal.timeout(6000),
   });
   if (!res.ok) return [];
 
-  const html = await res.text();
-  const domains: string[] = [];
-
-  const linkPattern = /class="result__a"[^>]*href="([^"]+)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = linkPattern.exec(html)) !== null) {
-    let href = match[1];
-
-    // DuckDuckGo's HTML endpoint wraps results as /l/?uddg=<encoded-target>
-    const uddgMatch = href.match(/uddg=([^&]+)/);
-    if (uddgMatch) {
-      href = decodeURIComponent(uddgMatch[1]);
-    }
-
-    const domain = normalizeDomain(href);
-    if (domain) domains.push(domain);
-  }
+  const data = await res.json();
+  const items: { url?: string }[] = data.web?.results || [];
+  const domains = items
+    .map((item) => (item.url ? normalizeDomain(item.url) : null))
+    .filter((d): d is string => Boolean(d));
 
   return dedupe(domains, limit);
 }
 
+function extractDomainsFromHtml(html: string, linkPattern: RegExp): string[] {
+  const domains: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(html)) !== null) {
+    let href = match[1];
+
+    // DuckDuckGo wraps results as /l/?uddg=<encoded-target>
+    const uddgMatch = href.match(/uddg=([^&]+)/);
+    if (uddgMatch) {
+      href = decodeURIComponent(uddgMatch[1]);
+    }
+    if (href.startsWith('//')) href = `https:${href}`;
+
+    const domain = normalizeDomain(href);
+    if (domain) domains.push(domain);
+  }
+  return domains;
+}
+
+async function discoverViaDuckDuckGo(niche: string, limit: number): Promise<string[]> {
+  const query = `${niche} shop buy online -site:amazon.com -site:etsy.com -site:ebay.com`;
+  const headers = {
+    'User-Agent': BROWSER_UA,
+    Accept: 'text/html,application/xhtml+xml',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  // Primary: full HTML endpoint
+  try {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      headers,
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const domains = extractDomainsFromHtml(html, /class="result__a"[^>]*href="([^"]+)"/g);
+      const deduped = dedupe(domains, limit);
+      if (deduped.length > 0) return deduped;
+    }
+  } catch {
+    // try lite endpoint next
+  }
+
+  // Fallback: lite endpoint, lighter markup, sometimes less aggressively blocked
+  try {
+    const res = await fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
+      headers,
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const domains = extractDomainsFromHtml(html, /<a[^>]*rel="nofollow"[^>]*href="([^"]+)"/g);
+      return dedupe(domains, limit);
+    }
+  } catch {
+    // give up, caller falls back to sample data
+  }
+
+  return [];
+}
+
 /**
- * Discovers candidate store domains for a niche keyword.
- * Tries Google Custom Search (if configured), then falls back to a free
- * DuckDuckGo HTML scrape. Actual "is this a real store" verification
- * happens downstream by probing each domain's products.json endpoint.
+ * Discovers candidate store domains for a niche keyword, trying providers in
+ * order of reliability: Google Custom Search and Brave Search (official JSON
+ * APIs, opt-in via env vars) before a best-effort DuckDuckGo HTML scrape,
+ * which search engines can rate-limit or block from shared serverless IPs.
+ * Actual "is this a real store" verification happens downstream by probing
+ * each domain's products.json endpoint.
  */
 export async function discoverCandidateDomains(
   niche: string,
@@ -113,6 +172,15 @@ export async function discoverCandidateDomains(
     const googleDomains = await discoverViaGoogleCse(niche, limit);
     if (googleDomains.length > 0) {
       return { domains: googleDomains, source: 'google_cse' };
+    }
+  } catch {
+    // fall through to next provider
+  }
+
+  try {
+    const braveDomains = await discoverViaBrave(niche, limit);
+    if (braveDomains.length > 0) {
+      return { domains: braveDomains, source: 'brave' };
     }
   } catch {
     // fall through to next provider
