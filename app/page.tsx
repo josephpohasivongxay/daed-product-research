@@ -6,6 +6,7 @@ import StoreCard from '@/components/StoreCard';
 import SortFilterBar from '@/components/SortFilterBar';
 import DemandPanel from '@/components/DemandPanel';
 import MarketValidationPanel from '@/components/MarketValidationPanel';
+import TikTokPanel from '@/components/TikTokPanel';
 import type { CommunitySource, SearchResponse } from '@/lib/types';
 import { filterStores, sortStores, DEFAULT_SORT, type FilterState, type SortKey } from '@/lib/sortFilter';
 
@@ -192,6 +193,8 @@ export default function Dashboard() {
 
         {data && !error && <DemandPanel demand={data.demand} niche={data.niche} />}
 
+        {data && !error && <TikTokPanel niche={data.niche} />}
+
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin mb-3" />
@@ -241,7 +244,7 @@ export default function Dashboard() {
             ) : (
               <div className="grid gap-4">
                 {visibleResults.map((store) => (
-                  <StoreCard key={store.domain} store={store} />
+                  <StoreCard key={store.domain} store={store} niche={data!.niche} />
                 ))}
               </div>
             )}

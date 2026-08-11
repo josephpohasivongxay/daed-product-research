@@ -43,9 +43,14 @@ weight than any single number.
    hardcoded copy.
 7. A **demand signals** panel shows whether search interest is rising or falling (Google Trends,
    12mo) and organic mention counts from Reddit and/or Hacker News (toggleable, not locked to
-   one community).
+   one community). A separate **TikTok panel** gives one-click manual-check links (no live data
+   — see below for why).
 8. Results default to sorting by Store Validation Score ("Recommended") instead of raw search
    order, and can be filtered by price, product count, or "established only" (6mo+ domain age).
+9. Clicking a store opens its own **detail page** (`/store/<domain>`) instead of leaving the app
+   — the full score breakdown, every evidence stat, its relevant products, and (if configured) its
+   active Facebook/Meta ads with how long each has been running. A separate "Visit site ↗" button
+   on the catalog card still goes straight to the store itself.
 
 ## The Market Validation Score
 
@@ -94,12 +99,40 @@ Validated, 75–89 Highly Validated, 60–74 Validated, 40–59 Uncertain, 0–3
   low/base/high range with a confidence rating (never higher than "medium," since the traffic
   input is a rank tier, not measured traffic) — never a single fake-precise dollar figure.
 
+## Facebook/Meta ad activity — free, but requires ID verification
+
+Each store's detail page can show its active Facebook/Instagram ads (count, how long each has
+been running, creative snippet, a link to view it) via Meta's **Ad Library API**. This is
+genuinely free with no paid tier — but **using it requires the account owner to personally
+verify their identity with Meta first**: upload a government ID (passport, national ID, or
+driver's license), confirm country of residence, and wait 1–3 business days for approval. This
+is not the same kind of setup as pasting an API key — it's a real, personal verification step.
+
+Once approved, create a Meta for Developers app, add the Ad Library API product, and generate an
+access token. Set it as `META_ACCESS_TOKEN`. Without it, the app works completely normally —
+the ads section just shows a manual "check Ad Library yourself" link instead.
+
+**Known limitation:** the API is searched by a brand name *guessed* from the domain (e.g.
+`coldplungeco.com` → `coldplungeco`), not the store's actual Facebook Page ID — if a brand's
+Page name doesn't resemble its domain, the search may turn up nothing even though they're
+advertising. Also, only creative/delivery-date fields are available for ordinary commercial ads;
+spend and impression estimates are restricted to political/social-issue ads under Meta's
+transparency rules, so "how long an ad has run" (not spend) is the strongest signal available
+here — a long-running ad is a reasonable proxy for "this is working," which was the original ask.
+
+## TikTok — no free API, so no fake data
+
+There's no free official way to get TikTok search-volume or engagement (views/likes) by keyword.
+TikTok's Research API requires institutional/academic approval; the alternatives are a paid
+third-party wrapper or an unofficial scrape. This project already learned that lesson the hard
+way with DuckDuckGo — its anti-bot interstitial got scraped as if it were real search results,
+which silently returned identical fake data across different searches. Rather than risk repeating
+that with TikTok, there's a **TikTok panel** on the results page (niche-level, not per-store, per
+how this was asked for) with direct links to search TikTok and its Creative Center trends page —
+an honest one-click manual check, not live numbers.
+
 ## What's intentionally not automated (and why)
 
-- **Ad activity detection.** Meta Ad Library is a client-rendered SPA with no public data
-  endpoint; real detection needs either a Meta developer app + access token, or a headless
-  browser per store, which doesn't fit a stateless serverless function. Store cards still link
-  directly to Meta Ads Library / TikTok Creative Center for a manual check.
 - **Social follower counts** (Instagram/TikTok/YouTube). Official APIs need business-account
   auth; public profile scraping is fragile and often JS-rendered. Not attempted.
 - **Full multi-platform product extraction.** WooCommerce/BigCommerce/Magento stores *do* appear
@@ -160,7 +193,8 @@ Open [http://localhost:3000](http://localhost:3000). Copy `.env.example` to `.en
 2. In [Vercel](https://vercel.com), **Add New Project** → import the repo.
 3. Leave build settings as default (Next.js is auto-detected) and click **Deploy**.
 4. Add `TAVILY_API_KEY` as an environment variable, then redeploy. Search will error clearly
-   until this is set — there's no fallback mode.
+   until this is set — there's no fallback mode. Optionally add `META_ACCESS_TOKEN` once you've
+   completed Meta's identity verification (see above) to enable the ads section on store pages.
 
 Heavier searches (relevance scoring, domain age, popularity, and review lookups per candidate)
 take longer than a plain search — `maxDuration` is set to 45s. If you hit Vercel's function
@@ -172,14 +206,19 @@ the candidate count in `app/api/search/route.ts`.
 ```
 app/
 ├── api/search/route.ts        # Orchestrates discovery, per-store enrichment, and scoring
-├── layout.tsx                   # Root layout, mobile viewport meta
-├── page.tsx                       # Dashboard: search, market panel, sort/filter, results
+├── api/store/route.ts           # Single-domain lookup (same enrichment + Meta ads)
+├── store/[domain]/page.tsx        # Store detail page (Server Component, direct data fetch)
+├── store/[domain]/loading.tsx       # Loading state for the detail page
+├── layout.tsx                         # Root layout, mobile viewport meta
+├── page.tsx                             # Dashboard: search, market panel, sort/filter, results
 └── globals.css
 components/
 ├── MarketValidationPanel.tsx      # Score breakdown, evidence stats, verdict, pricing gap
 ├── DemandPanel.tsx                  # Trend sparkline + community mention chips
-├── StoreCard.tsx                      # Catalog card per verified store (score, evidence)
-└── SortFilterBar.tsx                    # Sort dropdown + price/product-count/age filters
+├── TikTokPanel.tsx                    # Manual-check links (no live data — see above)
+├── StoreCard.tsx                        # Catalog card per verified store (score, evidence)
+├── StoreDetailView.tsx                    # Full store breakdown + Meta ads section
+└── SortFilterBar.tsx                        # Sort dropdown + price/product-count/age filters
 lib/
 ├── queryExpansion.ts                      # Mechanical query variant generation
 ├── discovery.ts                             # Tavily search, merged query variants
@@ -193,12 +232,14 @@ lib/
 ├── revenue.ts                                               # Traffic x conversion x AOV range
 ├── trends.ts                                                  # Google Trends niche signal
 ├── community.ts                                                # Pluggable Reddit/HN mentions
-├── marketScore.ts                                                # Store + market 0-100 scoring
-├── marketEvidence.ts                                               # Niche-level evidence roll-up
-├── verdict.ts                                                        # Evidence-driven verdict text
-├── opportunity.ts                                                      # Pricing-gap analysis
-├── sortFilter.ts                                                        # Client sort/filter
-├── format.ts                                                              # Display formatting
+├── metaAds.ts                                                    # Meta Ad Library (optional)
+├── buildStoreResult.ts                                             # Shared per-domain enrichment
+├── marketScore.ts                                                    # Store + market 0-100 scoring
+├── marketEvidence.ts                                                   # Niche-level evidence roll-up
+├── verdict.ts                                                            # Evidence-driven verdict text
+├── opportunity.ts                                                          # Pricing-gap analysis
+├── sortFilter.ts                                                            # Client sort/filter
+├── format.ts                                                                  # Display formatting
 └── types.ts
 ```
 

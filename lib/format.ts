@@ -63,3 +63,9 @@ export function formatTrafficRange(low: number, high: number | null): string {
   if (high === null) return `${formatCompactNumber(low)}+`;
   return `${formatCompactNumber(low)}–${formatCompactNumber(high)}`;
 }
+
+export function formatDuration(days: number): string {
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.round(days / 30)}mo`;
+  return `${(days / 365).toFixed(1)}y`;
+}

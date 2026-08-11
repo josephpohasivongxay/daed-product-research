@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   ExternalLink,
   Megaphone,
@@ -13,6 +14,7 @@ import {
   Target,
   Users,
   Info,
+  ChevronRight,
 } from 'lucide-react';
 import type { StoreResult } from '@/lib/types';
 import {
@@ -33,7 +35,7 @@ const SCORE_COLOR = (total: number) => {
   return 'text-slate-400 border-slate-800 bg-slate-900';
 };
 
-export default function StoreCard({ store }: { store: StoreResult }) {
+export default function StoreCard({ store, niche }: { store: StoreResult; niche: string }) {
   const hasProductData = store.productsSample > 0;
   const catalogLabel = hasProductData
     ? store.catalogSizeIsApproximate
@@ -45,15 +47,13 @@ export default function StoreCard({ store }: { store: StoreResult }) {
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <a
-            href={`https://${store.domain}`}
-            target="_blank"
-            rel="noreferrer"
-            className="group inline-flex items-center gap-1.5 text-base sm:text-lg font-semibold text-brand-300 hover:text-brand-200 truncate"
+          <Link
+            href={`/store/${encodeURIComponent(store.domain)}?niche=${encodeURIComponent(niche)}`}
+            className="group inline-flex items-center gap-1 text-base sm:text-lg font-semibold text-brand-300 hover:text-brand-200 truncate"
           >
             <span className="truncate">{store.domain}</span>
-            <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
-          </a>
+            <ChevronRight className="h-4 w-4 shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
           <p className="mt-0.5 text-xs text-slate-500">
             {formatPlatformLabel(store.platform)} · {catalogLabel} ·{' '}
             {formatPercent(store.relevancePercent / 100)} match to search
@@ -170,6 +170,15 @@ export default function StoreCard({ store }: { store: StoreResult }) {
       )}
 
       <div className="flex flex-wrap gap-2">
+        <a
+          href={`https://${store.domain}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Visit site
+        </a>
         {store.topProductUrl && (
           <a
             href={store.topProductUrl}

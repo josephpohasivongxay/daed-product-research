@@ -48,6 +48,28 @@ export type ProductReviews = {
   source: 'json-ld';
 };
 
+export type MetaAd = {
+  id: string;
+  pageName: string | null;
+  creativeBody: string | null;
+  /** ISO date the ad started running. */
+  startDate: string | null;
+  /** null = still active. */
+  stopDate: string | null;
+  daysRunning: number | null;
+  snapshotUrl: string | null;
+  platforms: string[];
+};
+
+export type MetaAdsSignal = {
+  activeCount: number;
+  longestRunningDays: number | null;
+  /** Longest-running ads first — a long-running ad is a stronger "this is working" signal than a fresh one. */
+  ads: MetaAd[];
+  /** The brand name guessed from the domain and searched against — matches aren't guaranteed. */
+  searchedAs: string;
+};
+
 export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
 
 export type StoreScoreBreakdown = {
@@ -172,5 +194,12 @@ export type SearchResponse = {
   results: StoreResult[];
   demand: DemandSignal;
   market: MarketValidation;
+  error?: string;
+};
+
+export type StoreDetailResponse = {
+  success: boolean;
+  store: StoreResult | null;
+  metaAds: MetaAdsSignal | null;
   error?: string;
 };

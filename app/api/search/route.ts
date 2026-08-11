@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
 import { discoverCandidateDomains, DiscoveryUnavailableError } from '@/lib/discovery';
-import { fetchShopifyCatalog } from '@/lib/shopify';
-import { fetchDomainAge } from '@/lib/domainAge';
-import { fetchPopularity } from '@/lib/popularity';
-import { fetchHomepageSignal } from '@/lib/platformDetect';
-import { fetchBestAvailableReviews } from '@/lib/reviews';
-import { estimateTrafficFromRank } from '@/lib/trafficEstimate';
-import { estimateMonthlyRevenue } from '@/lib/revenue';
-import { scoreHomepageRelevance, homepageRelevancePercent } from '@/lib/relevance';
-import { buildAdLinks } from '@/lib/adLinks';
+import { buildStoreResult } from '@/lib/buildStoreResult';
 import { fetchTrendSignal } from '@/lib/trends';
 import { ALL_COMMUNITY_SOURCES, fetchCommunityMentions } from '@/lib/community';
-import { computeMarketScore, computeStoreScore } from '@/lib/marketScore';
+import { computeMarketScore } from '@/lib/marketScore';
 import { buildMarketEvidence } from '@/lib/marketEvidence';
 import { generateVerdict } from '@/lib/verdict';
 import { computePricingGap } from '@/lib/opportunity';
@@ -29,97 +21,6 @@ function parseCommunitySources(raw: string | null): CommunitySource[] {
 
   const requested = raw.split(',').map((s) => s.trim());
   return ALL_COMMUNITY_SOURCES.filter((source) => requested.includes(source));
-}
-
-type StoreCheckResult = { store: StoreResult | null; platform: Platform };
-
-/**
- * Tries the Shopify products.json path first (real product/price/review
- * data). If that fails, the candidate isn't dropped outright — its
- * homepage is read once for a platform fingerprint and a much thinner
- * relevance signal (title + meta description), so stores on other
- * platforms still show up in the catalog instead of vanishing, just with
- * less data and a lower ceiling on their relevance score.
- */
-async function buildStoreResult(domain: string, niche: string): Promise<StoreCheckResult> {
-  const [catalog, domainAge, popularity] = await Promise.all([
-    fetchShopifyCatalog(domain, niche),
-    fetchDomainAge(domain),
-    fetchPopularity(domain),
-  ]);
-
-  if (catalog) {
-    const reviews = await fetchBestAvailableReviews(catalog.topProductUrls);
-    const traffic = estimateTrafficFromRank(popularity?.trancoRank ?? null);
-    const revenue = estimateMonthlyRevenue({
-      traffic,
-      avgPrice: catalog.priceStats?.avg ?? null,
-      catalogSize: catalog.productsSample,
-    });
-
-    const partial: Omit<StoreResult, 'score'> = {
-      domain: catalog.domain,
-      platform: 'shopify',
-      productsSample: catalog.productsSample,
-      catalogSizeIsApproximate: catalog.catalogSizeIsApproximate,
-      sampleProducts: catalog.sampleProducts,
-      topProductUrl: catalog.topProductUrls[0] ?? null,
-      relevancePercent: catalog.relevancePercent,
-      relevantProductCount: catalog.relevantProductCount,
-      priceStats: catalog.priceStats,
-      latestProductAt: catalog.latestProductAt,
-      revenue,
-      traffic,
-      reviews,
-      soldOutRatio: catalog.soldOutRatio,
-      soldOutVariants: catalog.soldOutVariants,
-      totalVariants: catalog.totalVariants,
-      domainAge,
-      popularity,
-      metaAdLink: catalog.metaAdLink,
-      tiktokAdLink: catalog.tiktokAdLink,
-    };
-
-    const score = computeStoreScore(partial);
-    return { store: { ...partial, score }, platform: 'shopify' };
-  }
-
-  const homepage = await fetchHomepageSignal(domain);
-  if (!homepage.title && !homepage.description) {
-    return { store: null, platform: homepage.platform };
-  }
-
-  const relevancePercent = homepageRelevancePercent(
-    scoreHomepageRelevance(homepage.title, homepage.description, niche)
-  );
-  if (relevancePercent === 0) {
-    return { store: null, platform: homepage.platform };
-  }
-
-  const partial: Omit<StoreResult, 'score'> = {
-    domain,
-    platform: homepage.platform,
-    productsSample: 0,
-    catalogSizeIsApproximate: false,
-    sampleProducts: [],
-    topProductUrl: null,
-    relevancePercent,
-    relevantProductCount: 0,
-    priceStats: null,
-    latestProductAt: null,
-    revenue: null,
-    traffic: estimateTrafficFromRank(popularity?.trancoRank ?? null),
-    reviews: null,
-    soldOutRatio: null,
-    soldOutVariants: 0,
-    totalVariants: 0,
-    domainAge,
-    popularity,
-    ...buildAdLinks(domain),
-  };
-
-  const score = computeStoreScore(partial);
-  return { store: { ...partial, score }, platform: homepage.platform };
 }
 
 export async function GET(request: Request) {
