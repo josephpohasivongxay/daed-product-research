@@ -186,6 +186,58 @@ export type MarketValidation = {
   pricingGap: PricingGap | null;
 };
 
+export type TamSizeLabel = 'Small' | 'Medium' | 'Large';
+export type CaptureRateLabel = 'Low' | 'Moderate' | 'High';
+
+export type TamSamSom = {
+  /** Annualized $, bottom-up from discovered-market revenue — not a published industry figure. */
+  tam: number;
+  sam: number;
+  som: number;
+  tamLabel: TamSizeLabel;
+  somCaptureRate: number;
+  somCaptureLabel: CaptureRateLabel;
+  coverageMultiplier: number;
+  assumptions: string[];
+};
+
+export type DemandMomentumLabel = 'Cooling' | 'Steady' | 'Rising';
+
+export type DemandFit = {
+  label: DemandMomentumLabel;
+  note: string;
+};
+
+export type CompetitiveLandscapeLabel = 'Open' | 'Competitive' | 'Saturated';
+
+export type CompetitiveFit = {
+  label: CompetitiveLandscapeLabel;
+  wedge: string | null;
+};
+
+export type WillingnessToPayLabel = 'Weak' | 'Moderate' | 'Strong';
+
+export type WillingnessToPayFit = {
+  label: WillingnessToPayLabel;
+  priceRangeNote: string | null;
+  evidenceNotes: string[];
+};
+
+export type MarketFitVerdictLabel = 'Ship' | 'Tweak' | 'Kill';
+
+export type MarketFitVerdict = {
+  verdict: MarketFitVerdictLabel;
+  reasoning: string[];
+};
+
+export type MarketFit = {
+  tamSamSom: TamSamSom | null;
+  demand: DemandFit;
+  competitive: CompetitiveFit;
+  willingnessToPay: WillingnessToPayFit;
+  verdict: MarketFitVerdict;
+};
+
 export type SearchResponse = {
   success: boolean;
   niche: string;
@@ -194,6 +246,7 @@ export type SearchResponse = {
   results: StoreResult[];
   demand: DemandSignal;
   market: MarketValidation;
+  marketFit: MarketFit;
   error?: string;
 };
 

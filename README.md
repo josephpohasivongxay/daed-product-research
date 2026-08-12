@@ -51,6 +51,56 @@ weight than any single number.
    — the full score breakdown, every evidence stat, its relevant products, and (if configured) its
    active Facebook/Meta ads with how long each has been running. A separate "Visit site ↗" button
    on the catalog card still goes straight to the store itself.
+10. A **Market Fit Analysis** panel runs first, above everything else — TAM/SAM/SOM, demand,
+    competitive landscape, and willingness-to-pay, rolled into a Ship/Tweak/Kill verdict. See
+    below for what this is and how it differs from the Market Validation Score.
+
+## Market Fit Analysis (TAM/SAM/SOM + Ship/Tweak/Kill)
+
+This ports this project's own `market-fit-orchestrator` skill — its 5-step framework (TAM,
+SAM/SOM, demand signals, competitive landscape, willingness-to-pay → a ship/tweak/kill verdict)
+— into the app itself (`lib/marketFit.ts`), shown as its own panel above the Market Validation
+Score. **This is a genuinely different lens from the Market Validation Score**, not a duplicate:
+the Validation Score asks "how strong is the evidence this specific search turned up," while
+Market Fit asks "is this actually a market worth entering" in classic TAM/SAM/SOM terms.
+
+**Important methodological difference from the original skill.** The skill does *live web
+research* per idea — top-down published industry reports, bottom-up unit-economics search,
+web-searched competitor pricing — via an LLM doing open-ended research at request time. This app
+has no LLM/web-search step in its request path by design (see the free-first notes throughout
+this README), so this port is **bottom-up only, computed entirely from data this search already
+collected** — no extra network calls, no added latency, no added cost:
+
+- **TAM** — the niche's estimated combined monthly revenue (already computed for the Market
+  Validation panel), annualized, then scaled up by a stated coverage multiplier (4x) reflecting
+  that live discovery finds a *sample* of the market, not an exhaustive census. This is
+  explicitly not a published industry figure — there's no way to fetch one without an LLM call.
+- **SAM** — TAM × ~90%, reflecting that an already-online DTC niche has little geographic
+  reachability constraint for a new entrant (unlike the skill's original local-services examples,
+  where SAM narrowing is about service radius).
+- **SOM** — SAM × an assumed new-entrant capture rate (1.5–8%, scaled down as more relevant
+  competitors are found — mirroring the skill's own "competitive intensity pulls SOM down" rule).
+  There's no per-user capacity/distribution input in this app, so this always assumes zero
+  existing audience — a business with real existing distribution could realistically capture more.
+- **Demand** — reuses the same Google Trends + Reddit/HN community-mention data already shown in
+  the Demand Signals panel, scored Cooling/Steady/Rising using the skill's own thresholds. (The
+  skill's third demand sub-signal, marketplace/platform listing growth, isn't included — no free
+  source for Etsy/Amazon category growth exists.)
+- **Competitive Landscape** — reuses the relevant-store count and the pricing-gap opportunity
+  note already computed for the Market Validation panel, scored Open/Competitive/Saturated.
+- **Willingness to Pay** — built from real, live-verified pricing across relevant stores (not
+  hypothetical or scraped from a rate card), average sold-out rate (real inventory depletion as
+  purchase evidence), and review-count evidence (real purchase volume) — arguably *stronger*
+  evidence than the skill's own "search for competitor pricing pages" step, since this is
+  observed data from the actual stores this search found, not published listings.
+- **Verdict** — Ship/Tweak/Kill, following the skill's own stated logic: Ship needs TAM
+  Medium+, SOM capture Moderate+, demand not Cooling, no saturated-with-no-wedge competitive
+  read, and WTP not Weak; Kill triggers when 2+ of {TAM Small, demand Cooling, WTP Weak} compound
+  together (not just one); everything else is Tweak, with the reasoning naming what to change.
+
+Every number here carries its assumptions (shown via "Show TAM/SAM/SOM assumptions" on the
+panel) — treat this as a structured starting estimate to sanity-check, the same way the original
+skill's own output is meant to be directional, not a certified market study.
 
 ## The Market Validation Score
 
@@ -213,12 +263,13 @@ app/
 ├── page.tsx                             # Dashboard: search, market panel, sort/filter, results
 └── globals.css
 components/
-├── MarketValidationPanel.tsx      # Score breakdown, evidence stats, verdict, pricing gap
-├── DemandPanel.tsx                  # Trend sparkline + community mention chips
-├── TikTokPanel.tsx                    # Manual-check links (no live data — see above)
-├── StoreCard.tsx                        # Catalog card per verified store (score, evidence)
-├── StoreDetailView.tsx                    # Full store breakdown + Meta ads section
-└── SortFilterBar.tsx                        # Sort dropdown + price/product-count/age filters
+├── MarketFitPanel.tsx             # TAM/SAM/SOM + Ship/Tweak/Kill (renders first)
+├── MarketValidationPanel.tsx        # Score breakdown, evidence stats, verdict, pricing gap
+├── DemandPanel.tsx                    # Trend sparkline + community mention chips
+├── TikTokPanel.tsx                      # Manual-check links (no live data — see above)
+├── StoreCard.tsx                          # Catalog card per verified store (score, evidence)
+├── StoreDetailView.tsx                      # Full store breakdown + Meta ads section
+└── SortFilterBar.tsx                          # Sort dropdown + price/product-count/age filters
 lib/
 ├── queryExpansion.ts                      # Mechanical query variant generation
 ├── discovery.ts                             # Tavily search, merged query variants
@@ -236,10 +287,11 @@ lib/
 ├── buildStoreResult.ts                                             # Shared per-domain enrichment
 ├── marketScore.ts                                                    # Store + market 0-100 scoring
 ├── marketEvidence.ts                                                   # Niche-level evidence roll-up
-├── verdict.ts                                                            # Evidence-driven verdict text
-├── opportunity.ts                                                          # Pricing-gap analysis
-├── sortFilter.ts                                                            # Client sort/filter
-├── format.ts                                                                  # Display formatting
+├── marketFit.ts                                                          # TAM/SAM/SOM + ship/tweak/kill
+├── verdict.ts                                                              # Evidence-driven verdict text
+├── opportunity.ts                                                            # Pricing-gap analysis
+├── sortFilter.ts                                                              # Client sort/filter
+├── format.ts                                                                    # Display formatting
 └── types.ts
 ```
 

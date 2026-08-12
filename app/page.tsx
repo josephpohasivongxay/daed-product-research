@@ -6,6 +6,7 @@ import StoreCard from '@/components/StoreCard';
 import SortFilterBar from '@/components/SortFilterBar';
 import DemandPanel from '@/components/DemandPanel';
 import MarketValidationPanel from '@/components/MarketValidationPanel';
+import MarketFitPanel from '@/components/MarketFitPanel';
 import TikTokPanel from '@/components/TikTokPanel';
 import type { CommunitySource, SearchResponse } from '@/lib/types';
 import { filterStores, sortStores, DEFAULT_SORT, type FilterState, type SortKey } from '@/lib/sortFilter';
@@ -188,6 +189,8 @@ export default function Dashboard() {
             {data.candidatesScanned === 1 ? '' : 's'} for &ldquo;{data.niche}&rdquo;
           </p>
         )}
+
+        {data && !error && <MarketFitPanel marketFit={data.marketFit} niche={data.niche} />}
 
         {data && !error && <MarketValidationPanel market={data.market} niche={data.niche} />}
 
