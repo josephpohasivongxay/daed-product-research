@@ -46,7 +46,7 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>(DEFAULT_SORT);
-  const [filters, setFilters] = useState<FilterState>({});
+  const [filters, setFilters] = useState<FilterState>({ validatedOnly: true });
   const [communitySources, setCommunitySources] = useState<CommunitySource[]>(['reddit', 'hackernews']);
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function Dashboard() {
     setError(null);
     setHasSearched(true);
     setSortBy(DEFAULT_SORT);
-    setFilters({});
+    setFilters({ validatedOnly: true });
 
     try {
       const params = new URLSearchParams({ niche: trimmed, community: communitySources.join(',') });
@@ -230,19 +230,25 @@ export default function Dashboard() {
               filters={filters}
               onFiltersChange={setFilters}
               resultCount={visibleResults.length}
+              totalCount={results.length}
             />
 
             {sortBy === 'recommended' && (
               <p className="text-[11px] text-slate-600 -mt-3 mb-4">
-                Recommended sorts by each store's Validation Score (the badge on its card) —
-                relevance, reviews, sold-out rate, popularity, and recent activity combined.
+                Recommended sorts by each store's Validation Score (the badge on its card) — sales
+                evidence (reviews, sold-out rate, traffic), longevity (domain age, recent activity),
+                and relevance to your search combined.
               </p>
             )}
 
             {visibleResults.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">
                 <p className="text-sm text-slate-400 mb-1">No stores match these filters.</p>
-                <p className="text-xs text-slate-600">Try widening your price or product-count range.</p>
+                <p className="text-xs text-slate-600">
+                  {filters.validatedOnly
+                    ? 'Try turning off "Validated only" to see every relevant store, even ones without strong sales evidence yet.'
+                    : 'Try widening your price or product-count range.'}
+                </p>
               </div>
             ) : (
               <div className="grid gap-4">

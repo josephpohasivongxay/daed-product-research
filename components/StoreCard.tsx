@@ -61,7 +61,7 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
         </div>
         <div
           className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-center ${SCORE_COLOR(store.score.total)}`}
-          title="Store Validation Score — blends relevance, reviews, sold-out rate, popularity, domain age, and recent activity"
+          title="Store Validation Score — sales evidence (reviews, sold-out rate, traffic) + longevity (domain age, recent activity) + relevance to your search. Price point is shown separately, not scored."
         >
           <div className="text-base font-bold leading-none">{store.score.total}</div>
           <div className="text-[9px] uppercase tracking-wide opacity-80">/100</div>

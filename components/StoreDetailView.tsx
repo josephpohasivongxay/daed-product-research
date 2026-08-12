@@ -20,11 +20,9 @@ const SCORE_COLOR = (total: number) => {
 };
 
 const CATEGORY_META: { key: keyof StoreResult['score']['breakdown']; label: string; max: number }[] = [
-  { key: 'demand', label: 'Demand (relevance)', max: 25 },
-  { key: 'commercialProof', label: 'Commercial Proof', max: 25 },
-  { key: 'popularity', label: 'Popularity', max: 20 },
-  { key: 'momentum', label: 'Momentum', max: 20 },
-  { key: 'monetization', label: 'Monetization', max: 10 },
+  { key: 'salesEvidence', label: 'Sales Evidence', max: 45 },
+  { key: 'longevity', label: 'Longevity', max: 25 },
+  { key: 'relevance', label: 'Relevance', max: 30 },
 ];
 
 function StatBlock({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -157,8 +155,12 @@ export default function StoreDetailView({
       </a>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 mb-6">
-        <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-3">Store Validation Score</p>
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-0.5">Store Validation Score</p>
+        <p className="text-[11px] text-slate-600 mb-3">
+          Scored on proof of sales and staying power only. Price point is deliberately not scored
+          here — see the price stat below for that, as brand-positioning context, not validation.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {CATEGORY_META.map(({ key, label, max }) => {
             const value = store.score.breakdown[key];
             const pct = Math.round((value / max) * 100);

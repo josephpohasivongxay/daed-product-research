@@ -41,9 +41,14 @@ export type FilterState = {
   minProducts?: number;
   /** Excludes stores confirmed younger than 6 months; unknown-age stores are kept (benefit of the doubt). */
   establishedOnly?: boolean;
+  /** Only stores whose total score clears VALIDATED_MIN_SCORE — on by default so the first thing shown is "relevant and proven," not every tangential match. */
+  validatedOnly?: boolean;
 };
 
 const ESTABLISHED_MIN_MONTHS = 6;
+
+/** A store needs real relevance AND real sales-evidence/longevity combined to reach this — can't be hit on relevance alone (max 30). */
+export const VALIDATED_MIN_SCORE = 60;
 
 export function filterStores(stores: StoreResult[], filters: FilterState): StoreResult[] {
   return stores.filter((s) => {
@@ -57,6 +62,9 @@ export function filterStores(stores: StoreResult[], filters: FilterState): Store
       return false;
     }
     if (filters.establishedOnly && s.domainAge && s.domainAge.months < ESTABLISHED_MIN_MONTHS) {
+      return false;
+    }
+    if (filters.validatedOnly && s.score.total < VALIDATED_MIN_SCORE) {
       return false;
     }
     return true;

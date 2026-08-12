@@ -73,11 +73,12 @@ export type MetaAdsSignal = {
 export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
 
 export type StoreScoreBreakdown = {
-  demand: number;
-  commercialProof: number;
-  popularity: number;
-  momentum: number;
-  monetization: number;
+  /** Reviews + sold-out rate + traffic — direct evidence people buy here. */
+  salesEvidence: number;
+  /** Domain age + recent catalog activity — a real, ongoing operation, not proof of sales by itself. */
+  longevity: number;
+  /** Lexical match strength to the searched niche — a gate, not a demand signal. */
+  relevance: number;
 };
 
 export type ScoreLabel = 'Extremely Validated' | 'Highly Validated' | 'Validated' | 'Uncertain' | 'Weak';

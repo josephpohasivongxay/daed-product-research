@@ -35,18 +35,22 @@ weight than any single number.
    first-N slice.
 5. Each store is enriched with domain age (RDAP/Wayback), popularity (Tranco rank), a review/
    rating pull from its top relevant product page, an estimated traffic tier, and a revenue
-   *range* — then scored 0–100 (Demand / Commercial Proof / Popularity / Momentum /
-   Monetization) as its **Store Validation Score**.
-6. All of that rolls up into a niche-level **Market Validation Score** (0–100, same five
-   categories but "Competition" instead of "Popularity") with an evidence summary and an
-   auto-generated verdict — built from the actual numbers collected for that search, not
-   hardcoded copy.
+   *range* — then scored 0–100 across three categories (Sales Evidence / Longevity / Relevance)
+   as its **Store Validation Score**. See "The Store Validation Score" below for why it's these
+   three and not others.
+6. All of that rolls up into a niche-level **Market Validation Score** (0–100, a separate set of
+   five categories — Demand / Commercial Proof / Competition / Momentum / Monetization, see
+   below) with an evidence summary and an auto-generated verdict — built from the actual numbers
+   collected for that search, not hardcoded copy.
 7. A **demand signals** panel shows whether search interest is rising or falling (Google Trends,
    12mo) and organic mention counts from Reddit and/or Hacker News (toggleable, not locked to
    one community). A separate **TikTok panel** gives one-click manual-check links (no live data
    — see below for why).
 8. Results default to sorting by Store Validation Score ("Recommended") instead of raw search
-   order, and can be filtered by price, product count, or "established only" (6mo+ domain age).
+   order, and default to showing only stores that clear the "Validated" bar (score 60+) — the
+   **"Validated only" toggle** next to the store count switches between "the proven ones" and
+   "everything with any lexical association," and other filters (price, product count,
+   "established only" / 6mo+ domain age) live in the Filters panel.
 9. Clicking a store opens its own **detail page** (`/store/<domain>`) instead of leaving the app
    — the full score breakdown, every evidence stat, its relevant products, and (if configured) its
    active Facebook/Meta ads with how long each has been running. A separate "Visit site ↗" button
@@ -102,18 +106,60 @@ Every number here carries its assumptions (shown via "Show TAM/SAM/SOM assumptio
 panel) — treat this as a structured starting estimate to sanity-check, the same way the original
 skill's own output is meant to be directional, not a certified market study.
 
+## The Store Validation Score
+
+0–100, per store, answering one question only: **does this specific store actually prove people
+buy in this niche?** Three categories, each earning its place against that question:
+
+| Category | Points | Signals used |
+| :--- | :--- | :--- |
+| Sales Evidence | 45 | Review count, sold-out rate, traffic tier |
+| Longevity | 25 | Domain age, recent catalog activity |
+| Relevance | 30 | Lexical match strength between the catalog and your search |
+
+Interpretation bands: 90–100 Extremely Validated, 75–89 Highly Validated, 60–74 Validated, 40–59
+Uncertain, 0–39 Weak. The **"Validated only" filter defaults on** and shows stores at 60+ —
+because relevance alone caps at 30/100, a store can't reach "Validated" on topical match alone;
+it has to also show real sales evidence and/or longevity.
+
+**This replaced an earlier 5-category version** (Demand / Commercial Proof / Popularity /
+Momentum / Monetization) that didn't hold up against the question above:
+
+- The old **"Demand"** category was, at the store level, just `relevancePercent` relabeled — a
+  store scoring high there proved it was *on-topic*, not that demand existed. That's an honest
+  gate, not a demand signal, so it's now correctly named **Relevance** and capped accordingly.
+  (Genuine demand data — Google Trends, community mentions — only exists at the niche level; see
+  the Market Validation Score below.)
+- The old **"Popularity"** category (Tranco rank + domain age) mixed two unrelated things: domain
+  age is a longevity/legitimacy check, and traffic rank is purchase-adjacent evidence that
+  belongs with reviews and sold-out rate. Splitting them stopped traffic from being counted
+  toward two different categories at once, and let domain age combine with recent catalog
+  activity into a single, more meaningful **Longevity** check (is this a real, ongoing operation,
+  not a dead or test store).
+- The old **"Monetization"** category (price tier) was dropped from the score entirely — a $15
+  store and a $150 store can be equally proven, so price point isn't validation evidence. It's
+  brand-positioning information instead, and stays visible on every store card and detail page
+  (avg. price range) as context for crafting your own offer, just not folded into the 0–100 math.
+
+`lib/marketScore.ts` (`computeStoreScore`) has the full formula and reasoning inline.
+
 ## The Market Validation Score
 
-0–100, weighted the same way at both the niche level and the per-store level (swapping
-"Competition," a market-wide concept, for "Popularity" on individual store cards):
+Niche-level, 0–100 — a different question from the Store Validation Score above ("is there
+evidence of a market at all," not "does this one store prove it"), so it keeps its own five
+categories:
 
 | Category | Points | Signals used |
 | :--- | :--- | :--- |
 | Demand | 25 | Relevant store count, Google Trends direction, community mentions |
 | Commercial Proof | 25 | High-traffic-tier stores, review counts, sold-out rate |
-| Competition / Popularity | 20 | Store count (additive, not punitive — see below) / Tranco rank + domain age |
+| Competition | 20 | Relevant store count (additive, not punitive — see below) |
 | Momentum | 20 | Recent catalog activity, Trends direction |
 | Monetization | 10 | Typical relevant-product price |
+
+Unlike the Store Validation Score, price point *is* relevant here — the typical price the market
+already supports is useful context for whether the niche can sustain a healthy margin, even
+though it says nothing about any one store's proof of sales.
 
 **Competition is not simply subtracted.** More established competitors is evidence a market
 exists, not automatically a red flag — the score only pulls back slightly at extreme saturation

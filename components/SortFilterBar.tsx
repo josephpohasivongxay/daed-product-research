@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 import { SORT_OPTIONS, type FilterState, type SortKey } from '@/lib/sortFilter';
 
 export default function SortFilterBar({
@@ -10,15 +10,24 @@ export default function SortFilterBar({
   filters,
   onFiltersChange,
   resultCount,
+  totalCount,
 }: {
   sortBy: SortKey;
   onSortChange: (value: SortKey) => void;
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
+  /** Stores left after every active filter, including "validated only". */
   resultCount: number;
+  /** Stores found for this search before any filter is applied. */
+  totalCount: number;
 }) {
   const [showFilters, setShowFilters] = useState(false);
-  const activeFilterCount = Object.values(filters).filter((v) => v !== undefined).length;
+  // "Validated only" has its own dedicated toggle below, so it's not counted
+  // as one of the "N filters active" badge — that badge is only for the
+  // secondary price/product/age filters in the collapsible panel.
+  const activeFilterCount = Object.entries(filters).filter(
+    ([key, v]) => key !== 'validatedOnly' && v !== undefined
+  ).length;
 
   function updateFilter(key: keyof FilterState, raw: string) {
     const value = raw === '' ? undefined : Number(raw);
@@ -27,10 +36,24 @@ export default function SortFilterBar({
 
   return (
     <div className="mb-4">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="text-xs text-slate-500">
-          {resultCount} store{resultCount === 1 ? '' : 's'}
-        </p>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onFiltersChange({ ...filters, validatedOnly: !filters.validatedOnly })}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+              filters.validatedOnly
+                ? 'border-brand-700 bg-brand-950/50 text-brand-300'
+                : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
+            }`}
+            title="Only show stores that clear the Validated bar (score 60+) — real relevance to your search plus real sales/longevity evidence"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Validated only
+          </button>
+          <p className="text-xs text-slate-500">
+            {resultCount} of {totalCount} store{totalCount === 1 ? '' : 's'}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilters((v) => !v)}
@@ -109,7 +132,7 @@ export default function SortFilterBar({
 
           {activeFilterCount > 0 && (
             <button
-              onClick={() => onFiltersChange({})}
+              onClick={() => onFiltersChange({ validatedOnly: filters.validatedOnly })}
               className="col-span-3 inline-flex items-center justify-center gap-1 text-xs text-slate-500 hover:text-slate-300 mt-1"
             >
               <X className="h-3 w-3" />

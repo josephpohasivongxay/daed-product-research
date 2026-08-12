@@ -9,6 +9,14 @@ import type {
 /** Only stores with at least some lexical match count as market "evidence" — a bare mention shouldn't inflate the score. */
 const RELEVANCE_EVIDENCE_THRESHOLD = 30;
 
+const TRAFFIC_TIER_WEIGHT: Record<string, number> = {
+  'very high': 1,
+  high: 0.8,
+  moderate: 0.5,
+  low: 0.25,
+  minimal: 0.1,
+};
+
 export function interpretScore(total: number): ScoreLabel {
   if (total >= 90) return 'Extremely Validated';
   if (total >= 75) return 'Highly Validated';
@@ -18,55 +26,64 @@ export function interpretScore(total: number): ScoreLabel {
 }
 
 /**
- * Per-store score (0-100). Mirrors the niche-level Market Validation Score's
- * intent but swaps "Competition" (a market-wide concept) for "Popularity" —
- * how this one store's domain age and Tranco rank compare.
+ * Per-store score (0-100), redesigned around one question: does this store
+ * actually prove people buy in this niche? Three categories, each earning
+ * its place:
+ *
+ * - Sales Evidence (45) — reviews, sold-out rate, traffic. The only direct
+ *   purchase evidence this tool has access to; weighted highest because
+ *   it's the closest thing to "proof," not just correlation.
+ * - Longevity (25) — domain age + recent catalog activity. Not proof of
+ *   sales by itself, but a filter against dead/abandoned/test stores —
+ *   necessary context, not a validation signal on its own.
+ * - Relevance (30) — how well this store's catalog matches the searched
+ *   niche. A gate ("is this even on-topic"), not evidence of demand —
+ *   an earlier version of this score called this "Demand," which was
+ *   wrong: it's lexical match strength, not market demand.
+ *
+ * Deliberately dropped as scored categories: raw traffic-rank "Popularity"
+ * (its useful half, domain age, moved into Longevity; its traffic half
+ * moved into Sales Evidence, so it's no longer double-counted across two
+ * categories) and "Monetization" (price tier). Price point isn't evidence
+ * a niche is validated — a $15 store and a $150 store can be equally
+ * proven — it's brand-positioning information, so it stays visible on
+ * every store card and detail page without being folded into the score.
  */
 export function computeStoreScore(store: Omit<StoreResult, 'score'>): StoreScore {
-  const demand = Math.round((store.relevancePercent / 100) * 25);
-
-  let commercialProof = 0;
+  let salesEvidence = 0;
   const reviewCount = store.reviews?.reviewCount ?? null;
   if (reviewCount !== null) {
     // A real niche DTC store with any visible reviews at all is already
-    // meaningful evidence — 1000+ reviews is storefront-of-a-major-brand
-    // territory, not a realistic bar for most stores this tool finds.
-    if (reviewCount >= 500) commercialProof += 15;
-    else if (reviewCount >= 50) commercialProof += 11;
-    else if (reviewCount >= 10) commercialProof += 7;
-    else if (reviewCount > 0) commercialProof += 3;
+    // meaningful evidence — 500+ reviews is a strong bar for most stores
+    // this tool finds, not a bar reserved for major-brand storefronts.
+    if (reviewCount >= 500) salesEvidence += 22;
+    else if (reviewCount >= 50) salesEvidence += 16;
+    else if (reviewCount >= 10) salesEvidence += 10;
+    else if (reviewCount > 0) salesEvidence += 5;
   }
-  if (store.soldOutRatio !== null) commercialProof += store.soldOutRatio * 10;
-  commercialProof = Math.round(Math.min(25, commercialProof));
+  if (store.soldOutRatio !== null) salesEvidence += store.soldOutRatio * 13;
+  if (store.traffic) {
+    salesEvidence += (TRAFFIC_TIER_WEIGHT[store.traffic.tier] ?? 0) * 10;
+  }
+  salesEvidence = Math.round(Math.min(45, salesEvidence));
 
-  let popularity = 0;
-  if (store.popularity?.trancoRank != null) {
-    popularity += Math.max(0, 1 - store.popularity.trancoRank / 1_000_000) * 12;
-  }
+  let longevity = 0;
   if (store.domainAge) {
-    popularity += Math.min(store.domainAge.months / 24, 1) * 8;
+    longevity += Math.min(store.domainAge.months / 24, 1) * 15;
   }
-  popularity = Math.round(Math.min(20, popularity));
-
-  let momentum = 0;
   if (store.latestProductAt) {
     const daysSince = (Date.now() - new Date(store.latestProductAt).getTime()) / (1000 * 60 * 60 * 24);
-    momentum = daysSince <= 60 ? 20 : daysSince <= 180 ? 10 : 0;
+    longevity += daysSince <= 60 ? 10 : daysSince <= 180 ? 5 : 0;
   }
+  longevity = Math.round(Math.min(25, longevity));
 
-  let monetization = 0;
-  if (store.revenue) {
-    if (store.revenue.base >= 50_000) monetization = 10;
-    else if (store.revenue.base >= 10_000) monetization = 7;
-    else if (store.revenue.base >= 1_000) monetization = 4;
-    else monetization = 2;
-  }
+  const relevance = Math.round((store.relevancePercent / 100) * 30);
 
-  const total = Math.min(100, demand + commercialProof + popularity + momentum + monetization);
+  const total = Math.min(100, salesEvidence + longevity + relevance);
 
   return {
     total,
-    breakdown: { demand, commercialProof, popularity, momentum, monetization },
+    breakdown: { salesEvidence, longevity, relevance },
     label: interpretScore(total),
   };
 }
@@ -93,17 +110,7 @@ export function computeMarketScore(results: StoreResult[], demandSignal: DemandS
   // actually found, not a fixed "5 stores needed" bar. A real niche search
   // often surfaces well under 5 relevant stores total, and Tranco's
   // "high"/"very high" tiers (top 100K/10K globally) are a bar almost no
-  // niche DTC store clears even when it's genuinely doing well — the old
-  // formula effectively required a 5-competitor market of top-100K-global
-  // sites to ever score above near-zero, which isn't what "commercial
-  // proof of a real niche" looks like.
-  const TRAFFIC_TIER_WEIGHT: Record<string, number> = {
-    'very high': 1,
-    high: 0.8,
-    moderate: 0.5,
-    low: 0.25,
-    minimal: 0.1,
-  };
+  // niche DTC store clears even when it's genuinely doing well.
   const storesWithTraffic = relevantStores.filter((r) => r.traffic !== null);
   const trafficProof = storesWithTraffic.length
     ? (storesWithTraffic.reduce((sum, r) => sum + (TRAFFIC_TIER_WEIGHT[r.traffic!.tier] ?? 0), 0) /
