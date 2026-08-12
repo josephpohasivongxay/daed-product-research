@@ -1,12 +1,12 @@
 import type { MarketEvidence, Platform, PriceStats, StoreResult } from './types';
 
-const RELEVANCE_EVIDENCE_THRESHOLD = 30;
-
 export function buildMarketEvidence(
   results: StoreResult[],
   platformBreakdown: Partial<Record<Platform, number>>
 ): MarketEvidence {
-  const relevantStores = results.filter((r) => r.relevancePercent >= RELEVANCE_EVIDENCE_THRESHOLD);
+  // `results` is already gated to relevant stores upstream (see
+  // lib/relevance.ts RELEVANCE_GATE_*, applied in app/api/search/route.ts).
+  const relevantStores = results;
 
   const highTrafficStoreCount = relevantStores.filter(
     (r) => r.traffic?.tier === 'high' || r.traffic?.tier === 'very high'

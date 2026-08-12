@@ -61,7 +61,7 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
         </div>
         <div
           className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-center ${SCORE_COLOR(store.score.total)}`}
-          title="Store Validation Score — sales evidence (reviews, sold-out rate, traffic) + longevity (domain age, recent activity) + relevance to your search. Price point is shown separately, not scored."
+          title="Store Validation Score — commercial proof (reviews, inventory depletion, sales-signal proxies) + operational health + traffic & authority + catalog investment + replicability. Relevance to your search already passed as a gate, not scored here; price point is shown separately, not scored."
         >
           <div className="text-base font-bold leading-none">{store.score.total}</div>
           <div className="text-[9px] uppercase tracking-wide opacity-80">/100</div>
@@ -139,6 +139,15 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
           <span className="inline-flex items-center gap-1" title="Tranco domain popularity rank">
             <BarChart2 className="h-3.5 w-3.5 text-slate-600" />
             {formatRank(store.popularity.trancoRank)}
+          </span>
+        )}
+        {store.paidTrafficIndicator !== null && (
+          <span
+            className="inline-flex items-center gap-1"
+            title="Display flag from Meta's Ad Library — whether visibility looks organic or ad-driven"
+          >
+            <Megaphone className="h-3.5 w-3.5 text-slate-600" />
+            {store.paidTrafficIndicator ? 'Paid ads detected' : 'No paid ads detected'}
           </span>
         )}
       </div>

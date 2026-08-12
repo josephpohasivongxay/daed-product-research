@@ -20,9 +20,11 @@ const SCORE_COLOR = (total: number) => {
 };
 
 const CATEGORY_META: { key: keyof StoreResult['score']['breakdown']; label: string; max: number }[] = [
-  { key: 'salesEvidence', label: 'Sales Evidence', max: 45 },
-  { key: 'longevity', label: 'Longevity', max: 25 },
-  { key: 'relevance', label: 'Relevance', max: 30 },
+  { key: 'commercialProof', label: 'Commercial Proof', max: 40 },
+  { key: 'operationalHealth', label: 'Operational Health', max: 15 },
+  { key: 'trafficAuthority', label: 'Traffic & Authority', max: 15 },
+  { key: 'catalogInvestment', label: 'Catalog Investment', max: 15 },
+  { key: 'replicability', label: 'Replicability', max: 15 },
 ];
 
 function StatBlock({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -157,10 +159,13 @@ export default function StoreDetailView({
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 mb-6">
         <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-0.5">Store Validation Score</p>
         <p className="text-[11px] text-slate-600 mb-3">
-          Scored on proof of sales and staying power only. Price point is deliberately not scored
-          here — see the price stat below for that, as brand-positioning context, not validation.
+          Answers one question: does this store prove REAL, REPLICABLE sales a small operator could
+          model — not just "does this look big or busy." Relevance to your search already passed as
+          a gate before this store was ranked at all, so it isn&rsquo;t scored again here. Price
+          point is deliberately not scored either — see the price stat below for that, as brand-
+          positioning context, not validation.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           {CATEGORY_META.map(({ key, label, max }) => {
             const value = store.score.breakdown[key];
             const pct = Math.round((value / max) * 100);
@@ -179,7 +184,58 @@ export default function StoreDetailView({
             );
           })}
         </div>
+        <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 p-3">
+          <p className="text-[11px] text-slate-500 mb-1.5">
+            Commercial Proof breakdown ({store.score.breakdown.commercialProof}/40)
+          </p>
+          <p className="text-[11px] text-slate-400">
+            Review evidence {store.score.commercialProofDetail.reviewEvidence} · Inventory depletion{' '}
+            {store.score.commercialProofDetail.inventoryDepletion} · Sales-signal proxies{' '}
+            {store.score.commercialProofDetail.salesProxies}
+          </p>
+          {store.score.commercialProofDetail.reviewDataRedistributed && (
+            <p className="text-[11px] text-slate-600 mt-1">
+              No review data was found for this store — its 20-point review share was redistributed
+              into inventory depletion and sales-signal proxies instead of penalizing the store for
+              missing data.
+            </p>
+          )}
+        </div>
       </div>
+
+      {store.angleFindings && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 mb-6">
+          <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-3">
+            Angle-finding notes
+          </p>
+          <div className="mb-3">
+            <p className="text-xs text-slate-500 mb-1">Price position</p>
+            <p className="text-sm text-slate-300">{store.angleFindings.pricePosition}</p>
+          </div>
+          <div className="mb-3">
+            <p className="text-xs text-slate-500 mb-1">Replicability</p>
+            <p className="text-sm text-slate-300">{store.angleFindings.replicabilityNote}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Review gap-mining (2-3★)</p>
+            {store.angleFindings.reviewGapsAvailable ? (
+              <ul className="space-y-1.5">
+                {store.angleFindings.reviewGaps.map((body, idx) => (
+                  <li key={idx} className="text-sm text-slate-300 rounded-lg border border-slate-800 bg-slate-950/50 p-2">
+                    &ldquo;{body}&rdquo;
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">
+                This store&rsquo;s data source doesn&rsquo;t expose individual review text (or none
+                fell in the 2-3★ range) — check its review widget directly for complaint patterns to
+                build a differentiation angle around.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
         {store.priceStats && (
@@ -224,6 +280,16 @@ export default function StoreDetailView({
             value={formatPercent(store.soldOutRatio)}
             hint={`${store.soldOutVariants} of ${store.totalVariants} sampled variants unavailable`}
           />
+        )}
+        {store.paidTrafficIndicator !== null && (
+          <StatBlock
+            label="Paid traffic (Meta Ads)"
+            value={store.paidTrafficIndicator ? 'Active ads detected' : 'No active ads detected'}
+            hint="Display flag from Meta's Ad Library — shows whether visibility looks organic or ad-driven, feeds the Replicability score but isn't scored on its own"
+          />
+        )}
+        {store.salesSignals?.isBestsellerListed && (
+          <StatBlock label="Bestseller listed" value="Yes" hint="A relevant product appears in this store's own best-sellers collection" />
         )}
         {store.domainAge && (
           <StatBlock

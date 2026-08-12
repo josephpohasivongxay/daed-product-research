@@ -1,13 +1,11 @@
 import type {
+  CommercialProofDetail,
   DemandSignal,
   MarketScore,
   ScoreLabel,
   StoreResult,
   StoreScore,
 } from './types';
-
-/** Only stores with at least some lexical match count as market "evidence" — a bare mention shouldn't inflate the score. */
-const RELEVANCE_EVIDENCE_THRESHOLD = 30;
 
 const TRAFFIC_TIER_WEIGHT: Record<string, number> = {
   'very high': 1,
@@ -25,65 +23,207 @@ export function interpretScore(total: number): ScoreLabel {
   return 'Weak';
 }
 
+function reviewTierCredit(reviewCount: number): number {
+  if (reviewCount >= 500) return 12;
+  if (reviewCount >= 50) return 9;
+  if (reviewCount >= 10) return 6;
+  if (reviewCount > 0) return 3;
+  return 0;
+}
+
 /**
- * Per-store score (0-100), redesigned around one question: does this store
- * actually prove people buy in this niche? Three categories, each earning
- * its place:
- *
- * - Sales Evidence (45) — reviews, sold-out rate, traffic. The only direct
- *   purchase evidence this tool has access to; weighted highest because
- *   it's the closest thing to "proof," not just correlation.
- * - Longevity (25) — domain age + recent catalog activity. Not proof of
- *   sales by itself, but a filter against dead/abandoned/test stores —
- *   necessary context, not a validation signal on its own.
- * - Relevance (30) — how well this store's catalog matches the searched
- *   niche. A gate ("is this even on-topic"), not evidence of demand —
- *   an earlier version of this score called this "Demand," which was
- *   wrong: it's lexical match strength, not market demand.
- *
- * Deliberately dropped as scored categories: raw traffic-rank "Popularity"
- * (its useful half, domain age, moved into Longevity; its traffic half
- * moved into Sales Evidence, so it's no longer double-counted across two
- * categories) and "Monetization" (price tier). Price point isn't evidence
- * a niche is validated — a $15 store and a $150 store can be equally
- * proven — it's brand-positioning information, so it stays visible on
- * every store card and detail page without being folded into the score.
+ * Commercial Proof (40 pts) — Review Evidence 20 + Inventory Depletion 10 +
+ * Sales-Signal Proxies 10, EXCEPT when review data is a total miss (not
+ * "0 reviews found," but "no review data at all"): its 20-point share is
+ * redistributed proportionally into the other two (10→20 each), so a store
+ * with genuinely no review-app data isn't structurally capped below one
+ * that happens to have Judge.me installed — it just has to prove itself
+ * through inventory/sales-proxy evidence instead.
  */
-export function computeStoreScore(store: Omit<StoreResult, 'score'>): StoreScore {
-  let salesEvidence = 0;
-  const reviewCount = store.reviews?.reviewCount ?? null;
-  if (reviewCount !== null) {
-    // A real niche DTC store with any visible reviews at all is already
-    // meaningful evidence — 500+ reviews is a strong bar for most stores
-    // this tool finds, not a bar reserved for major-brand storefronts.
-    if (reviewCount >= 500) salesEvidence += 22;
-    else if (reviewCount >= 50) salesEvidence += 16;
-    else if (reviewCount >= 10) salesEvidence += 10;
-    else if (reviewCount > 0) salesEvidence += 5;
-  }
-  if (store.soldOutRatio !== null) salesEvidence += store.soldOutRatio * 13;
-  if (store.traffic) {
-    salesEvidence += (TRAFFIC_TIER_WEIGHT[store.traffic.tier] ?? 0) * 10;
-  }
-  salesEvidence = Math.round(Math.min(45, salesEvidence));
+function computeCommercialProof(store: Omit<StoreResult, 'score'>): {
+  total: number;
+  detail: CommercialProofDetail;
+} {
+  const reviewDataRedistributed = store.reviews === null;
+  const inventoryCap = reviewDataRedistributed ? 20 : 10;
+  const salesProxyCap = reviewDataRedistributed ? 20 : 10;
 
-  let longevity = 0;
-  if (store.domainAge) {
-    longevity += Math.min(store.domainAge.months / 24, 1) * 15;
+  let reviewEvidence = 0;
+  if (!reviewDataRedistributed) {
+    const count = store.reviews!.reviewCount ?? 0;
+    const base = reviewTierCredit(count);
+    let recency: number;
+    if (store.reviews!.recentReviewCount !== null) {
+      const recent = store.reviews!.recentReviewCount;
+      recency = recent >= 10 ? 8 : recent >= 5 ? 6 : recent >= 1 ? 3 : 0;
+    } else {
+      // This store's review data doesn't expose individual dates — neutral
+      // partial credit derived from the base tier, not a penalty for a gap
+      // in what the source exposes.
+      recency = Math.round(base * 0.4);
+    }
+    reviewEvidence = Math.min(20, base + recency);
   }
-  if (store.latestProductAt) {
-    const daysSince = (Date.now() - new Date(store.latestProductAt).getTime()) / (1000 * 60 * 60 * 24);
-    longevity += daysSince <= 60 ? 10 : daysSince <= 180 ? 5 : 0;
+
+  // Sold-out rate alone is ambiguous (could be poor restocking, not
+  // demand) — downweight it when there's no review evidence corroborating
+  // that people are actually buying here.
+  const hasCorroboratingReviews = !reviewDataRedistributed && (store.reviews!.reviewCount ?? 0) > 0;
+  let inventoryDepletion = 0;
+  if (store.soldOutRatio !== null) {
+    inventoryDepletion = store.soldOutRatio * inventoryCap;
+    if (!hasCorroboratingReviews) inventoryDepletion *= 0.5;
+    inventoryDepletion = Math.min(inventoryCap, inventoryDepletion);
   }
-  longevity = Math.round(Math.min(25, longevity));
 
-  const relevance = Math.round((store.relevancePercent / 100) * 30);
+  let salesProxies = 0;
+  const signals = store.salesSignals;
+  if (signals) {
+    if (signals.isBestsellerListed) salesProxies += salesProxyCap * 0.5;
+    if (signals.hasSoldCountBadge) salesProxies += salesProxyCap * 0.3;
+    if (signals.partialSelloutRatio !== null) salesProxies += signals.partialSelloutRatio * salesProxyCap * 0.2;
+    salesProxies = Math.min(salesProxyCap, salesProxies);
+  }
 
-  const total = Math.min(100, salesEvidence + longevity + relevance);
+  const total = Math.round(Math.min(40, reviewEvidence + inventoryDepletion + salesProxies));
 
   return {
     total,
-    breakdown: { salesEvidence, longevity, relevance },
+    detail: {
+      reviewEvidence: Math.round(reviewEvidence),
+      inventoryDepletion: Math.round(inventoryDepletion),
+      salesProxies: Math.round(salesProxies),
+      reviewDataRedistributed,
+    },
+  };
+}
+
+/**
+ * Operational Health (15 pts) — domain age, but weighted toward recent
+ * signal freshness so a coasting multi-year-old store doesn't automatically
+ * outscore an actively thriving newer one: raw age caps at 7 of the 15,
+ * with the rest earned by recent catalog activity and recent review flow.
+ */
+function computeOperationalHealth(store: Omit<StoreResult, 'score'>): number {
+  let ageCredit = 0;
+  if (store.domainAge) {
+    ageCredit = Math.min(store.domainAge.months / 36, 1) * 7;
+  }
+
+  let catalogFreshness = 0;
+  if (store.latestProductAt) {
+    const days = (Date.now() - new Date(store.latestProductAt).getTime()) / (1000 * 60 * 60 * 24);
+    catalogFreshness = days <= 30 ? 5 : days <= 90 ? 3 : days <= 180 ? 1 : 0;
+  }
+
+  let reviewFreshness = 0;
+  const recent = store.reviews?.recentReviewCount;
+  if (recent !== null && recent !== undefined) {
+    reviewFreshness = recent >= 5 ? 3 : recent >= 1 ? 1.5 : 0;
+  }
+
+  return Math.round(Math.min(15, ageCredit + catalogFreshness + reviewFreshness));
+}
+
+/** Traffic & Authority (15 pts) — Tranco rank tier only. The paid-traffic indicator is a display flag (and a Replicability input), not scored here. */
+function computeTrafficAuthority(store: Omit<StoreResult, 'score'>): number {
+  if (!store.traffic) return 0;
+  return Math.round((TRAFFIC_TIER_WEIGHT[store.traffic.tier] ?? 0) * 15);
+}
+
+/** Catalog Investment (15 pts) — SKU/collection depth. Deliberately NOT recency-gated: a lean, static, high-converting catalog is investment evidence, not neglect. */
+function computeCatalogInvestment(store: Omit<StoreResult, 'score'>): number {
+  if (store.catalogSizeIsApproximate) return 15; // hit the 250-product sample cap — a real, invested catalog
+  const n = store.productsSample;
+  if (n >= 100) return 13;
+  if (n >= 50) return 10;
+  if (n >= 20) return 7;
+  if (n >= 5) return 4;
+  if (n > 0) return 2;
+  return 0;
+}
+
+/** How "big" this store currently looks — the stronger of its traffic or review-volume signal, used only to gauge growth rate below. */
+function scaleProxy(store: Omit<StoreResult, 'score'>): number {
+  const trafficWeight = store.traffic ? TRAFFIC_TIER_WEIGHT[store.traffic.tier] ?? 0 : 0;
+  const count = store.reviews?.reviewCount ?? 0;
+  const reviewWeight = count >= 500 ? 1 : count >= 50 ? 0.6 : count >= 10 ? 0.3 : count > 0 ? 0.15 : 0;
+  return Math.max(trafficWeight, reviewWeight);
+}
+
+/**
+ * Replicability Flag (15 pts) — a composite estimate of "small operator
+ * could realistically copy this," not "this store looks big or busy."
+ * Three inputs, each pulling toward "bootstrapped and modelable" or away
+ * toward "funded brand, not a realistic template":
+ *
+ * - Catalog size (5) — a lean catalog is easier to plan inventory/content
+ *   around than a 250-SKU operation; smaller scores higher here (the
+ *   inverse of Catalog Investment above, intentionally — the same fact
+ *   means different things for "how proven" vs. "how copyable").
+ * - Paid-traffic indicator (5) — no detected active ad spend reads as
+ *   organic/bootstrap-built; detected ad spend reads as funded growth.
+ *   Unknown (no META_ACCESS_TOKEN configured) gets neutral partial credit,
+ *   never a penalty for missing data.
+ * - Domain-age-to-scale ratio (5) — reaching real scale (traffic/reviews)
+ *   FAST on a young domain usually means capital-backed paid growth, not a
+ *   playbook a bootstrapper can copy; scale reached gradually over more
+ *   time reads as organic and more realistically modelable.
+ */
+function computeReplicability(store: Omit<StoreResult, 'score'>): number {
+  let points = 0;
+
+  const n = store.productsSample;
+  if (n === 0) points += 2.5; // no catalog data (non-Shopify) — can't assess, stay neutral
+  else if (n <= 20) points += 5;
+  else if (n <= 50) points += 4;
+  else if (n <= 100) points += 2.5;
+  else points += 1;
+
+  if (store.paidTrafficIndicator === false) points += 5;
+  else if (store.paidTrafficIndicator === null) points += 2.5;
+  // paidTrafficIndicator === true adds 0 — active ad spend is a funded-brand signal.
+
+  if (store.domainAge) {
+    const growthRate = scaleProxy(store) / Math.max(store.domainAge.months, 1);
+    if (growthRate <= 0.01) points += 5;
+    else if (growthRate <= 0.03) points += 3;
+    else if (growthRate <= 0.06) points += 1;
+    // else 0 — scaled up fast, likely capital-backed rather than a bootstrapped climb
+  } else {
+    points += 2.5;
+  }
+
+  return Math.round(Math.min(15, points));
+}
+
+/**
+ * Per-store score (0-100), v4: answers one question only — does this store
+ * prove real, REPLICABLE sales, something a small operator can actually
+ * model and enter against (not just "does this store look big or busy")?
+ *
+ * Relevance is NOT a category here — it's a pass/fail gate applied before a
+ * store is ranked at all (lib/relevance.ts, RELEVANCE_GATE_*). Every store
+ * reaching this function has already cleared that bar, so relevance has no
+ * further effect on the score.
+ *
+ * Price/monetization tier is also explicitly out of scoring — a $15 item
+ * and a $150 item are equally valid proof a niche sells. It's stored as
+ * metadata (priceStats) and surfaced in angle-finding output instead.
+ */
+export function computeStoreScore(store: Omit<StoreResult, 'score'>): StoreScore {
+  const { total: commercialProof, detail: commercialProofDetail } = computeCommercialProof(store);
+  const operationalHealth = computeOperationalHealth(store);
+  const trafficAuthority = computeTrafficAuthority(store);
+  const catalogInvestment = computeCatalogInvestment(store);
+  const replicability = computeReplicability(store);
+
+  const total = Math.min(100, commercialProof + operationalHealth + trafficAuthority + catalogInvestment + replicability);
+
+  return {
+    total,
+    breakdown: { commercialProof, operationalHealth, trafficAuthority, catalogInvestment, replicability },
+    commercialProofDetail,
     label: interpretScore(total),
   };
 }
@@ -96,7 +236,10 @@ export function computeStoreScore(store: Omit<StoreResult, 'score'>): StoreScore
  * slightly at the extreme end to reflect saturation risk.
  */
 export function computeMarketScore(results: StoreResult[], demandSignal: DemandSignal): MarketScore {
-  const relevantStores = results.filter((r) => r.relevancePercent >= RELEVANCE_EVIDENCE_THRESHOLD);
+  // `results` is already gated to relevant stores upstream (lib/relevance.ts
+  // RELEVANCE_GATE_*, applied in app/api/search/route.ts) — no need to
+  // re-filter here.
+  const relevantStores = results;
   const storeCount = relevantStores.length;
 
   // Demand

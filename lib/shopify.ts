@@ -32,6 +32,8 @@ export type ShopifyCatalogData = {
   sampleProducts: SampleProduct[];
   /** Best relevant product page URLs, used for review extraction. */
   topProductUrls: string[];
+  /** Relevant product handles, used to check bestseller-collection overlap. */
+  relevantHandles: string[];
   /** Title + short description snippet of top relevant products, for niche-wide selling-angle extraction. */
   keywordSnippets: string[];
   relevancePercent: number;
@@ -41,6 +43,8 @@ export type ShopifyCatalogData = {
   soldOutRatio: number | null;
   soldOutVariants: number;
   totalVariants: number;
+  /** Share of relevant multi-variant products with SOME but not all variants sold out — an organic depletion pattern. null when there were no multi-variant relevant products to check. */
+  partialSelloutRatio: number | null;
   metaAdLink: string;
   tiktokAdLink: string;
 };
@@ -93,6 +97,68 @@ function computeSoldOutStats(products: ShopifyProduct[]): {
 
   const soldOut = trackedVariants.filter((v) => v.available === false).length;
   return { ratio: soldOut / trackedVariants.length, soldOut, total: trackedVariants.length };
+}
+
+/**
+ * A product with SOME but not all variants sold out looks like organic,
+ * over-time depletion (real customers picking off specific sizes/colors) —
+ * distinct from every variant being unavailable at once (could just be a
+ * relist/delist) or nothing moving at all. Scoped to the relevant/pricing
+ * pool, same as every other niche-specific stat here.
+ */
+function computePartialSelloutRatio(products: ShopifyProduct[]): number | null {
+  const multiVariant = products.filter((p) => {
+    const tracked = (p.variants || []).filter((v) => typeof v.available === 'boolean');
+    return tracked.length > 1;
+  });
+  if (multiVariant.length === 0) return null;
+
+  const partial = multiVariant.filter((p) => {
+    const tracked = p.variants!.filter((v) => typeof v.available === 'boolean');
+    const soldOut = tracked.filter((v) => v.available === false).length;
+    return soldOut > 0 && soldOut < tracked.length;
+  }).length;
+
+  return partial / multiVariant.length;
+}
+
+const BESTSELLER_COLLECTION_HANDLES = ['best-sellers', 'bestsellers', 'best-seller'];
+
+async function fetchBestsellerHandles(domain: string): Promise<Set<string> | null> {
+  for (const handle of BESTSELLER_COLLECTION_HANDLES) {
+    try {
+      const res = await fetch(`https://${domain}/collections/${handle}/products.json?limit=250`, {
+        headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) continue;
+      if (!(res.headers.get('content-type') || '').includes('json')) continue;
+
+      const data: ShopifyProductsResponse = await res.json();
+      const products = data.products;
+      if (!Array.isArray(products) || products.length === 0) continue;
+
+      return new Set(products.map((p) => p.handle).filter((h): h is string => Boolean(h)));
+    } catch {
+      // try the next handle convention
+    }
+  }
+  return null;
+}
+
+/**
+ * Best-effort check for whether any of this store's niche-relevant products
+ * also show up in its own "best sellers" collection — a store-declared
+ * signal, not something we're inferring. Absence of a best-sellers
+ * collection (common — not every theme uses one) or any fetch failure
+ * degrades to `false`, same as "no evidence found," never blocking the
+ * store from otherwise appearing.
+ */
+export async function fetchBestsellerOverlap(domain: string, relevantHandles: string[]): Promise<boolean> {
+  if (relevantHandles.length === 0) return false;
+  const bestsellerHandles = await fetchBestsellerHandles(domain);
+  if (!bestsellerHandles) return false;
+  return relevantHandles.some((h) => bestsellerHandles.has(h));
 }
 
 /**
@@ -149,6 +215,11 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
       .filter((p) => p.handle)
       .map((p) => `https://${domain}/products/${p.handle}`);
 
+    const relevantHandles = displayPool
+      .slice(0, 10)
+      .map((p) => p.handle)
+      .filter((h): h is string => Boolean(h));
+
     const keywordSnippets = displayPool.slice(0, 3).map((p) => {
       const title = p.title || '';
       const description = p.body_html ? stripHtml(p.body_html).slice(0, 200) : '';
@@ -165,6 +236,7 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
       catalogSizeIsApproximate: products.length >= CATALOG_SAMPLE_LIMIT,
       sampleProducts,
       topProductUrls,
+      relevantHandles,
       keywordSnippets,
       relevancePercent,
       relevantProductCount,
@@ -173,6 +245,7 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
       soldOutRatio: soldOutStats.ratio,
       soldOutVariants: soldOutStats.soldOut,
       totalVariants: soldOutStats.total,
+      partialSelloutRatio: computePartialSelloutRatio(pricingPool),
       ...buildAdLinks(domain),
     };
   } catch {

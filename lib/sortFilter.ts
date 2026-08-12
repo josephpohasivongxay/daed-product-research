@@ -47,7 +47,7 @@ export type FilterState = {
 
 const ESTABLISHED_MIN_MONTHS = 6;
 
-/** A store needs real relevance AND real sales-evidence/longevity combined to reach this — can't be hit on relevance alone (max 30). */
+/** A store already had to clear the relevance gate (lib/relevance.ts) just to appear at all — this bar is about the v4 score itself: real commercial proof, operational health, traffic, catalog investment, and replicability combined. */
 export const VALIDATED_MIN_SCORE = 60;
 
 export function filterStores(stores: StoreResult[], filters: FilterState): StoreResult[] {

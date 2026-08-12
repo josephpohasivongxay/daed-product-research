@@ -23,21 +23,22 @@ weight than any single number.
    a valid Shopify feed are kept as full-data stores. Everything else isn't just discarded — its
    homepage gets a lightweight platform fingerprint check
    (Shopify/WooCommerce/BigCommerce/Magento/Wix/Squarespace/custom/unknown) and a homepage-text
-   relevance read, and if it shows any real association with the niche, it's kept as a **thinner
-   card** (domain, platform, relevance, domain age, popularity — no product/price/review data,
-   since that extraction is Shopify-only). Only candidates with *zero* detected association to
-   the niche are dropped — this is what makes the results a catalog of "every store associated
-   with the keyword," not just whichever ones happen to run Shopify.
+   relevance read, so stores on other platforms still show up (just with less data, since full
+   product/price/review extraction is Shopify-only).
 4. Within each store's catalog, products are **scored for relevance** to the searched niche
    (title/type/tags/description matching) — a store that sells 200 unrelated products and
-   mentions the niche once won't outrank one whose catalog is built around it. Pricing, sample
-   products, and the store's relevance % are all based on the relevant subset, not an arbitrary
-   first-N slice.
-5. Each store is enriched with domain age (RDAP/Wayback), popularity (Tranco rank), a review/
-   rating pull from its top relevant product page, an estimated traffic tier, and a revenue
-   *range* — then scored 0–100 across three categories (Sales Evidence / Longevity / Relevance)
-   as its **Store Validation Score**. See "The Store Validation Score" below for why it's these
-   three and not others.
+   mentions the niche once won't outrank one whose catalog is built around it. A store only
+   enters the catalog at all once its relevance clears a **gate** (60% for a full Shopify catalog
+   match, or a proportional 25% for the thinner homepage-only read non-Shopify stores get) —
+   above that bar, relevance has no further effect on rank; it's a pass/fail filter, not part of
+   the score. See "The Store Validation Score" below for why.
+5. Each store is enriched with domain age (RDAP/Wayback), popularity (Tranco rank), review
+   evidence pulled directly from its own product pages (JSON-LD, with a widget-embed fallback —
+   never search-based), inventory-depletion and sales-signal proxies (bestseller-collection
+   overlap, sold-count badges, partial-sellout patterns), an estimated traffic tier, and a
+   revenue *range* — then scored 0–100 across five categories (Commercial Proof / Operational
+   Health / Traffic & Authority / Catalog Investment / Replicability) as its **Store Validation
+   Score**. See "The Store Validation Score" below for the full model and why it's these five.
 6. All of that rolls up into a niche-level **Market Validation Score** (0–100, a separate set of
    five categories — Demand / Commercial Proof / Competition / Momentum / Monetization, see
    below) with an evidence summary and an auto-generated verdict — built from the actual numbers
@@ -49,13 +50,17 @@ weight than any single number.
 8. Results default to sorting by Store Validation Score ("Recommended") instead of raw search
    order, and default to showing only stores that clear the "Validated" bar (score 60+) — the
    **"Validated only" toggle** next to the store count switches between "the proven ones" and
-   "everything with any lexical association," and other filters (price, product count,
+   "everything that cleared the relevance gate," and other filters (price, product count,
    "established only" / 6mo+ domain age) live in the Filters panel.
-9. Clicking a store opens its own **detail page** (`/store/<domain>`) instead of leaving the app
-   — the full score breakdown, every evidence stat, its relevant products, and (if configured) its
-   active Facebook/Meta ads with how long each has been running. A separate "Visit site ↗" button
-   on the catalog card still goes straight to the store itself.
-10. A **Market Fit Analysis** panel runs first, above everything else — TAM/SAM/SOM, demand,
+9. The top 10 stores by score in every search get **angle-finding output** attached
+   automatically: 2-3★ review-gap text (when the store's data exposes individual reviews), where
+   its pricing sits against the rest of the relevant stores found, and a plain-language note on
+   why it scored the way it did on Replicability. See "Angle-finding output" below.
+10. Clicking a store opens its own **detail page** (`/store/<domain>`) instead of leaving the app
+   — the full score breakdown, every evidence stat, its relevant products, its angle-finding
+   notes, and (if configured) its active Facebook/Meta ads with how long each has been running. A
+   separate "Visit site ↗" button on the catalog card still goes straight to the store itself.
+11. A **Market Fit Analysis** panel runs first, above everything else — TAM/SAM/SOM, demand,
     competitive landscape, and willingness-to-pay, rolled into a Ship/Tweak/Kill verdict. See
     below for what this is and how it differs from the Market Validation Score.
 
@@ -106,42 +111,108 @@ Every number here carries its assumptions (shown via "Show TAM/SAM/SOM assumptio
 panel) — treat this as a structured starting estimate to sanity-check, the same way the original
 skill's own output is meant to be directional, not a certified market study.
 
-## The Store Validation Score
+## The Store Validation Score (v4)
 
-0–100, per store, answering one question only: **does this specific store actually prove people
-buy in this niche?** Three categories, each earning its place against that question:
+0–100, per store, answering one question: **does this store prove REAL, REPLICABLE sales — the
+kind a small operator could actually model and enter against — not just "does this look big or
+busy"?**
+
+### Step 1 — Relevance gate (pass/fail, not scored)
+
+A store has to clear a minimum keyword-to-catalog match before it's ranked at all: **60%** for a
+full Shopify catalog match, or a proportionally equivalent **25%** for non-Shopify stores (whose
+homepage-only relevance read is capped at 40 to begin with, since it's much thinner evidence than
+a whole product catalog — see `lib/relevance.ts`). Above its threshold, relevance has zero further
+effect on rank. This replaced an earlier version where relevance was itself a scored category —
+that conflated "is this on-topic" (a filter) with "is this validated" (the actual question).
+
+### Step 2 — Score (100 points)
 
 | Category | Points | Signals used |
 | :--- | :--- | :--- |
-| Sales Evidence | 45 | Review count, sold-out rate, traffic tier |
-| Longevity | 25 | Domain age, recent catalog activity |
-| Relevance | 30 | Lexical match strength between the catalog and your search |
+| Commercial Proof | 40 | Review evidence (20) + inventory depletion (10) + sales-signal proxies (10) |
+| Operational Health | 15 | Domain age, weighted toward recent freshness over raw longevity |
+| Traffic & Authority | 15 | Tranco rank tier |
+| Catalog Investment | 15 | SKU/collection depth — not recency-gated |
+| Replicability | 15 | Catalog size + paid-traffic indicator + domain-age-to-scale ratio |
 
 Interpretation bands: 90–100 Extremely Validated, 75–89 Highly Validated, 60–74 Validated, 40–59
-Uncertain, 0–39 Weak. The **"Validated only" filter defaults on** and shows stores at 60+ —
-because relevance alone caps at 30/100, a store can't reach "Validated" on topical match alone;
-it has to also show real sales evidence and/or longevity.
+Uncertain, 0–39 Weak. The **"Validated only" filter defaults on** and shows stores at 60+.
 
-**This replaced an earlier 5-category version** (Demand / Commercial Proof / Popularity /
-Momentum / Monetization) that didn't hold up against the question above:
+**Commercial Proof (40)** is the core "did anyone actually buy" signal, broken into three parts:
+- **Review evidence (20)** — sourced only from a direct-fetch waterfall per store (JSON-LD
+  `AggregateRating`, then a widget-embed fallback — see below), never from search results, which
+  don't see JS-rendered review-app content. Recent reviews (last 90 days) are weighted over raw
+  total count, since recency is stronger "selling *now*" evidence than a large but possibly-stale
+  total. **If review data is a total miss** (not "0 reviews found" — genuinely no data from either
+  fetch step), its 20-point share is redistributed proportionally into the two signals below
+  (10→20 each) so a store isn't structurally capped below others just because it lacks a review
+  app; it has to earn those points from inventory/sales-proxy evidence instead.
+- **Inventory depletion (10)** — sold-out variant share from `products.json`. Downweighted 50%
+  when there's no corroborating review evidence, since sold-out alone is ambiguous (could reflect
+  poor restocking, not demand).
+- **Sales-signal proxies (10)** — bestseller-collection placement (does a relevant product also
+  appear in the store's own `/collections/best-sellers`?), "N sold" style badge text found on an
+  already-fetched product page, and a partial-variant-sellout pattern (some but not all variants
+  of a product gone — organic depletion, vs. an all-or-nothing delist).
 
-- The old **"Demand"** category was, at the store level, just `relevancePercent` relabeled — a
-  store scoring high there proved it was *on-topic*, not that demand existed. That's an honest
-  gate, not a demand signal, so it's now correctly named **Relevance** and capped accordingly.
-  (Genuine demand data — Google Trends, community mentions — only exists at the niche level; see
-  the Market Validation Score below.)
-- The old **"Popularity"** category (Tranco rank + domain age) mixed two unrelated things: domain
-  age is a longevity/legitimacy check, and traffic rank is purchase-adjacent evidence that
-  belongs with reviews and sold-out rate. Splitting them stopped traffic from being counted
-  toward two different categories at once, and let domain age combine with recent catalog
-  activity into a single, more meaningful **Longevity** check (is this a real, ongoing operation,
-  not a dead or test store).
-- The old **"Monetization"** category (price tier) was dropped from the score entirely — a $15
-  store and a $150 store can be equally proven, so price point isn't validation evidence. It's
-  brand-positioning information instead, and stays visible on every store card and detail page
-  (avg. price range) as context for crafting your own offer, just not folded into the 0–100 math.
+**Operational Health (15)** caps raw domain age at 7 of the 15 points, with the rest earned by
+recent catalog activity and recent review flow — so a coasting multi-year-old store doesn't
+automatically outscore an actively thriving newer one.
 
-`lib/marketScore.ts` (`computeStoreScore`) has the full formula and reasoning inline.
+**Catalog Investment (15) is deliberately not recency-gated** — a lean, static, high-converting
+catalog is investment evidence, not neglect.
+
+**Replicability (15)** is the newest idea in this model: it doesn't ask "is this store
+successful," it asks "could a small operator realistically copy this." A large funded brand and a
+bootstrapped winner can look identical on every other category — this one is built specifically to
+tell them apart, from three inputs: catalog size (leaner scores higher — easier to plan around
+than a 250-SKU operation), the paid-traffic indicator (no detected ad spend reads as
+organic/bootstrap-built; detected spend reads as funded growth; unknown gets neutral credit, never
+a penalty), and a domain-age-to-scale ratio (reaching real scale FAST on a young domain usually
+means capital-backed paid growth, not a copyable playbook; scale reached gradually reads as
+organic and more realistically modelable).
+
+**Explicitly out of scoring:** price/monetization tier. A $15 item and a $150 item are equally
+valid proof a niche sells — price stays visible as metadata (the price stat on every card/detail
+page) and feeds the angle-finding output's price-position note, never the 0–100 math.
+
+`lib/marketScore.ts` (`computeStoreScore`) has the full formula and reasoning inline. This is the
+second major redesign of this score — the first replaced an even earlier 5-category version
+(Demand/Commercial Proof/Popularity/Momentum/Monetization) whose "Demand" category was just
+relevance relabeled; this version goes further, replacing "is this store validated" with "is this
+store's success something you could actually replicate."
+
+### Review data collection: direct-fetch waterfall, not search
+
+Reviews rendered by apps like Judge.me, Loox, Stamped, and Okendo are JS-widget content — not
+present in crawlable page text a search index returns. This tool never tries to find reviews via
+search; it fetches each candidate product page directly and reads structured data already on the
+page:
+1. **JSON-LD** (`schema.org/AggregateRating`) — most review apps inject this for SEO regardless of
+   which app is installed. When the same JSON-LD exposes individual `review[]` entries with
+   `datePublished`, those also drive the recency weighting above and the 2-3★ text used for
+   angle-finding gap-mining.
+2. **Widget-embed fallback** — if no JSON-LD is found, a regex scan for data attributes Judge.me,
+   Loox, and Stamped commonly render server-side into their own preview badges (e.g.
+   `data-average-rating`/`data-number-of-reviews`), independent of the JSON-LD block. This reads
+   already-public, already-rendered markup — no app API tokens or undocumented endpoints involved.
+3. **Null, not zero, on a total miss.** If both steps find nothing, review data is `null` —
+   explicitly distinct from a real `0`. A `0` means "we found review data, and there wasn't any
+   yet." `null` means "we don't know," and (per Commercial Proof above) doesn't penalize the store.
+
+### Angle-finding output
+
+The **top 10 stores by score** in every search get this attached automatically (not optional
+extra credit) — visible on the store detail page under "Angle-finding notes":
+- **Review gap-mining** — 2-3★ review text (not 5★), the primary way to spot a recurring
+  complaint worth building a differentiated angle around. Pulled only from structured data this
+  tool already fetched; when a store's data source doesn't expose individual review bodies, that's
+  stated plainly rather than inventing a "common complaint."
+- **Price position** — where this store's average relevant-product price sits against every other
+  relevant store found this search (undercut / typical / premium).
+- **Replicability context** — a plain-language note on why the Replicability score landed where it
+  did, referencing catalog size, paid-ad detection, and domain age.
 
 ## The Market Validation Score
 
@@ -188,9 +259,13 @@ unchanged. `lib/marketScore.ts` has the full formula.
 - **Community mentions** — Reddit's public search + Hacker News' official Algolia API, shown as
   toggleable chips so it isn't locked to one community. Adding a source is one function in
   `lib/community.ts` plus a registration line.
-- **Reviews** — pulled from the schema.org `AggregateRating` JSON-LD that most Shopify review
-  apps (Judge.me, Loox, Yotpo, ...) already inject into product pages for SEO. App-agnostic, no
-  per-app integration needed. Reviews are a commercial-activity signal, not a sales count.
+- **Reviews** — a direct-fetch waterfall (JSON-LD `AggregateRating`, then a widget-embed
+  data-attribute fallback for Judge.me/Loox/Stamped) run against each store's own product pages —
+  never search-based, since review-widget content is JS-rendered and invisible to a search index.
+  See "Review data collection" above for the full waterfall and the null-vs-zero distinction.
+- **Sales-signal proxies** — bestseller-collection overlap, "N sold" badge text, and partial-
+  variant-sellout patterns, all read from data already fetched for the review waterfall and
+  `products.json` (no extra requests beyond one best-sellers collection check per store).
 - **Domain age** — [RDAP](https://about.rdap.org/) (the IETF-standardized WHOIS replacement) via
   `rdap.org`'s free bootstrap redirector, falling back to the Wayback Machine's first capture
   date when RDAP doesn't cover a TLD or a registrar's privacy proxy hides the date.
@@ -209,8 +284,15 @@ unchanged. `lib/marketScore.ts` has the full formula.
 ## Facebook/Meta ad activity — free, but requires ID verification
 
 Each store's detail page can show its active Facebook/Instagram ads (count, how long each has
-been running, creative snippet, a link to view it) via Meta's **Ad Library API**. This is
-genuinely free with no paid tier — but **using it requires the account owner to personally
+been running, creative snippet, a link to view it) via Meta's **Ad Library API**. The same lookup
+also feeds the **paid-traffic indicator** shown on every store card/detail page once a niche
+search's results are gated — true (active ads found) / false (checked, none found) / not shown at
+all (unchecked, e.g. no token configured). It's a display flag and a Replicability input, never
+scored on its own. In a niche search it's only checked for stores that already cleared the
+relevance gate, with a small concurrency limit (`PAID_TRAFFIC_CONCURRENCY` in
+`app/api/search/route.ts`), so it doesn't fan out to every discovered candidate.
+
+This is genuinely free with no paid tier — but **using it requires the account owner to personally
 verify their identity with Meta first**: upload a government ID (passport, national ID, or
 driver's license), confirm country of residence, and wait 1–3 business days for approval. This
 is not the same kind of setup as pasting an API key — it's a real, personal verification step.
@@ -341,28 +423,30 @@ components/
 ├── StoreDetailView.tsx                      # Full store breakdown + Meta ads section
 └── SortFilterBar.tsx                          # Sort dropdown + price/product-count/age filters
 lib/
-├── queryExpansion.ts                      # Mechanical query variant generation
-├── discovery.ts                             # Tavily search, merged query variants
-├── relevance.ts                               # Lexical product/store relevance scoring
-├── shopify.ts                                   # products.json fetch, relevance-ranked
-├── platformDetect.ts                              # Lightweight non-Shopify classification
-├── reviews.ts                                       # JSON-LD AggregateRating extraction
-├── domainAge.ts                                       # RDAP + Wayback Machine domain age
-├── popularity.ts                                        # Tranco rank (best-effort)
-├── trafficEstimate.ts                                     # Rank-tier traffic estimate
-├── revenue.ts                                               # Traffic x conversion x AOV range
-├── trends.ts                                                  # Google Trends niche signal
-├── community.ts                                                # Pluggable Reddit/HN mentions
-├── metaAds.ts                                                    # Meta Ad Library (optional)
-├── buildStoreResult.ts                                             # Shared per-domain enrichment
-├── marketScore.ts                                                    # Store + market 0-100 scoring
-├── marketEvidence.ts                                                   # Niche-level evidence roll-up
-├── marketFit.ts                                                          # TAM/SAM/SOM + ship/tweak/kill
-├── verdict.ts                                                              # Evidence-driven verdict text
-├── opportunity.ts                                                            # Pricing-gap analysis
-├── angles.ts                                                                   # Common selling-angle extraction
-├── sortFilter.ts                                                                 # Client sort/filter
-├── format.ts                                                                    # Display formatting
+├── queryExpansion.ts                             # Mechanical query variant generation
+├── discovery.ts                                    # Tavily search, merged query variants
+├── relevance.ts                                      # Lexical product/store relevance scoring + gate thresholds
+├── shopify.ts                                          # products.json fetch, relevance-ranked + bestseller/sellout signals
+├── platformDetect.ts                                     # Lightweight non-Shopify classification
+├── reviews.ts                                              # JSON-LD + widget-embed review waterfall, recency, gap text
+├── domainAge.ts                                              # RDAP + Wayback Machine domain age
+├── popularity.ts                                               # Tranco rank (best-effort)
+├── trafficEstimate.ts                                            # Rank-tier traffic estimate
+├── revenue.ts                                                      # Traffic x conversion x AOV range
+├── trends.ts                                                         # Google Trends niche signal
+├── community.ts                                                        # Pluggable Reddit/HN mentions
+├── metaAds.ts                                                            # Meta Ad Library + paid-traffic indicator
+├── buildStoreResult.ts                                                     # Shared per-domain enrichment
+├── concurrency.ts                                                            # Bounded-concurrency fetch helper
+├── angleFindings.ts                                                            # Top-10 review-gap/price-position/replicability notes
+├── marketScore.ts                                                                # Store (v4, 5-category) + market 0-100 scoring
+├── marketEvidence.ts                                                               # Niche-level evidence roll-up
+├── marketFit.ts                                                                      # TAM/SAM/SOM + ship/tweak/kill
+├── verdict.ts                                                                          # Evidence-driven verdict text
+├── opportunity.ts                                                                        # Pricing-gap analysis
+├── angles.ts                                                                               # Common selling-angle extraction
+├── sortFilter.ts                                                                             # Client sort/filter
+├── format.ts                                                                                   # Display formatting
 └── types.ts
 ```
 

@@ -76,6 +76,23 @@ export function rankProductsByRelevance<T extends RelevanceInput>(
  * are the exact niche item scores higher than a store where 4 of 300
  * products happen to mention it in passing.
  */
+/**
+ * Relevance is a pass/fail gate, not a score component: above the
+ * threshold it has zero further effect on rank (see lib/marketScore.ts).
+ * Full-catalog (Shopify) relevance and homepage-only relevance are scored
+ * on different ceilings — homepageRelevancePercent caps at 40 since a
+ * single homepage is much thinner evidence than an entire product catalog
+ * — so each gets its own gate, set to the same proportional bar (60% of
+ * that tier's own ceiling) rather than one number that would silently
+ * exclude every non-Shopify store.
+ */
+export const RELEVANCE_GATE_CATALOG = 60;
+export const RELEVANCE_GATE_HOMEPAGE = 25;
+
+export function passesRelevanceGate(hasFullCatalog: boolean, relevancePercent: number): boolean {
+  return relevancePercent >= (hasFullCatalog ? RELEVANCE_GATE_CATALOG : RELEVANCE_GATE_HOMEPAGE);
+}
+
 export function computeStoreRelevancePercent(scored: { score: number }[]): {
   percent: number;
   matchedCount: number;

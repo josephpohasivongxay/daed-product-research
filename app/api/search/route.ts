@@ -3,19 +3,28 @@ import { discoverCandidateDomains, DiscoveryUnavailableError } from '@/lib/disco
 import { buildStoreResult } from '@/lib/buildStoreResult';
 import { fetchTrendSignal } from '@/lib/trends';
 import { ALL_COMMUNITY_SOURCES, fetchCommunityMentions } from '@/lib/community';
-import { computeMarketScore } from '@/lib/marketScore';
+import { computeMarketScore, computeStoreScore } from '@/lib/marketScore';
 import { buildMarketEvidence } from '@/lib/marketEvidence';
 import { generateVerdict } from '@/lib/verdict';
 import { computePricingGap } from '@/lib/opportunity';
 import { computeMarketFit } from '@/lib/marketFit';
 import { computeCommonAngles } from '@/lib/angles';
+import { computeAngleFindings } from '@/lib/angleFindings';
+import { fetchMetaAds } from '@/lib/metaAds';
+import { mapWithConcurrency } from '@/lib/concurrency';
+import { passesRelevanceGate } from '@/lib/relevance';
 import type { CommunitySource, DemandSignal, Platform, SearchResponse, StoreResult } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
 
 const CANDIDATE_LIMIT = 30;
-const RELEVANCE_EVIDENCE_THRESHOLD = 30;
+// Each candidate now does several direct fetches (catalog, review pages,
+// bestseller collection, domain age, popularity) — bounding how many run
+// at once keeps a 30-candidate search from firing 150+ requests together.
+const CANDIDATE_CONCURRENCY = 8;
+const ANGLE_FINDINGS_COUNT = 10;
+const PAID_TRAFFIC_CONCURRENCY = 4;
 
 function parseCommunitySources(raw: string | null): CommunitySource[] {
   if (raw === null) return ALL_COMMUNITY_SOURCES;
@@ -38,26 +47,39 @@ export async function GET(request: Request) {
     const { domains, source } = await discoverCandidateDomains(niche, CANDIDATE_LIMIT);
 
     const [storeChecks, trend, community] = await Promise.all([
-      Promise.allSettled(domains.map((d) => buildStoreResult(d, niche))),
+      mapWithConcurrency(domains, CANDIDATE_CONCURRENCY, (d) => buildStoreResult(d, niche)),
       fetchTrendSignal(niche),
       fetchCommunityMentions(niche, communitySources),
     ]);
 
-    const results: StoreResult[] = [];
+    let results: StoreResult[] = [];
     const platformBreakdown: Partial<Record<Platform, number>> = {};
 
     for (const check of storeChecks) {
       if (check.status !== 'fulfilled') continue;
       const { store, platform } = check.value;
       platformBreakdown[platform] = (platformBreakdown[platform] ?? 0) + 1;
-      // Only keep stores with at least some detected textual association
-      // with the niche — this is what "every store that has association
-      // with the keyword" means in practice, as opposed to every domain a
-      // search engine happened to surface.
-      if (store && store.relevancePercent > 0) {
+      // Relevance is a pass/fail gate (lib/relevance.ts), not a score
+      // component: a store has to clear it to be ranked at all, but
+      // clearing it by a little vs. a lot makes no further difference.
+      if (store && passesRelevanceGate(store.platform === 'shopify', store.relevancePercent)) {
         results.push(store);
       }
     }
+
+    // Paid-traffic indicator (Meta Ad Library presence) is only checked for
+    // stores that already cleared the relevance gate — no point spending
+    // API calls (and, when META_ACCESS_TOKEN is unset, this is a free
+    // no-op per store) on candidates that won't be shown. It feeds the
+    // Replicability Flag, so scores are recomputed after it's known.
+    const withPaidTraffic = await mapWithConcurrency(results, PAID_TRAFFIC_CONCURRENCY, async (store) => {
+      const metaAds = await fetchMetaAds(store.domain);
+      const paidTrafficIndicator = metaAds ? metaAds.activeCount > 0 : null;
+      const updated = { ...store, paidTrafficIndicator };
+      const { score: _oldScore, ...rest } = updated;
+      return { ...rest, score: computeStoreScore(rest) };
+    });
+    results = withPaidTraffic.map((r, i) => (r.status === 'fulfilled' ? r.value : results[i]));
 
     const demand: DemandSignal = { trend, community };
     const marketScore = computeMarketScore(results, demand);
@@ -65,12 +87,20 @@ export async function GET(request: Request) {
     const verdict = generateVerdict(marketScore, evidence, niche);
 
     const relevantAvgPrices = results
-      .filter((r) => r.relevancePercent >= RELEVANCE_EVIDENCE_THRESHOLD)
       .map((r) => r.priceStats?.avg)
       .filter((v): v is number => v !== undefined && v !== null);
     const pricingGap = computePricingGap(relevantAvgPrices);
     const marketFit = computeMarketFit(evidence, demand, pricingGap, results);
     const commonAngles = computeCommonAngles(results, niche);
+
+    // Step 3 of the scoring spec: angle-finding output is required for the
+    // top 10 stores by score, not optional. Attach in place so the rest of
+    // the result set is untouched.
+    const topByScore = [...results].sort((a, b) => b.score.total - a.score.total).slice(0, ANGLE_FINDINGS_COUNT);
+    const topDomains = new Set(topByScore.map((s) => s.domain));
+    results = results.map((store) =>
+      topDomains.has(store.domain) ? { ...store, angleFindings: computeAngleFindings(store, relevantAvgPrices) } : store
+    );
 
     const body: SearchResponse = {
       success: true,

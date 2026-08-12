@@ -45,7 +45,7 @@ export default function SortFilterBar({
                 ? 'border-brand-700 bg-brand-950/50 text-brand-300'
                 : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
             }`}
-            title="Only show stores that clear the Validated bar (score 60+) — real relevance to your search plus real sales/longevity evidence"
+            title="Only show stores that clear the Validated bar (score 60+) — commercial proof, operational health, traffic, catalog investment, and replicability combined. Every store here already passed the relevance gate just to appear."
           >
             <ShieldCheck className="h-3.5 w-3.5" />
             Validated only

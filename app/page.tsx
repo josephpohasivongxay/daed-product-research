@@ -235,9 +235,10 @@ export default function Dashboard() {
 
             {sortBy === 'recommended' && (
               <p className="text-[11px] text-slate-600 -mt-3 mb-4">
-                Recommended sorts by each store's Validation Score (the badge on its card) — sales
-                evidence (reviews, sold-out rate, traffic), longevity (domain age, recent activity),
-                and relevance to your search combined.
+                Recommended sorts by each store's Validation Score (the badge on its card) —
+                commercial proof, operational health, traffic & authority, catalog investment, and
+                replicability combined. Relevance to your search already passed as a gate before a
+                store was ranked at all, so it's not part of this score.
               </p>
             )}
 

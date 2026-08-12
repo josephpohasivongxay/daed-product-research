@@ -1,14 +1,14 @@
-import { fetchShopifyCatalog } from './shopify';
+import { fetchShopifyCatalog, fetchBestsellerOverlap } from './shopify';
 import { fetchDomainAge } from './domainAge';
 import { fetchPopularity } from './popularity';
 import { fetchHomepageSignal } from './platformDetect';
-import { fetchBestAvailableReviews } from './reviews';
+import { fetchBestAvailableEvidence } from './reviews';
 import { estimateTrafficFromRank } from './trafficEstimate';
 import { estimateMonthlyRevenue } from './revenue';
 import { scoreHomepageRelevance, homepageRelevancePercent } from './relevance';
 import { buildAdLinks } from './adLinks';
 import { computeStoreScore } from './marketScore';
-import type { Platform, StoreResult } from './types';
+import type { Platform, SalesSignals, StoreResult } from './types';
 
 export type StoreCheckResult = { store: StoreResult | null; platform: Platform };
 
@@ -32,13 +32,21 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
   ]);
 
   if (catalog) {
-    const reviews = await fetchBestAvailableReviews(catalog.topProductUrls);
+    const [evidence, isBestsellerListed] = await Promise.all([
+      fetchBestAvailableEvidence(catalog.topProductUrls),
+      fetchBestsellerOverlap(domain, catalog.relevantHandles),
+    ]);
     const traffic = estimateTrafficFromRank(popularity?.trancoRank ?? null);
     const revenue = estimateMonthlyRevenue({
       traffic,
       avgPrice: catalog.priceStats?.avg ?? null,
       catalogSize: catalog.productsSample,
     });
+    const salesSignals: SalesSignals = {
+      isBestsellerListed,
+      hasSoldCountBadge: evidence.hasSoldCountBadge,
+      partialSelloutRatio: catalog.partialSelloutRatio,
+    };
 
     const partial: Omit<StoreResult, 'score'> = {
       domain: catalog.domain,
@@ -54,12 +62,16 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
       latestProductAt: catalog.latestProductAt,
       revenue,
       traffic,
-      reviews,
+      reviews: evidence.reviews,
+      reviewGapBodies: evidence.reviewGapBodies,
       soldOutRatio: catalog.soldOutRatio,
       soldOutVariants: catalog.soldOutVariants,
       totalVariants: catalog.totalVariants,
       domainAge,
       popularity,
+      salesSignals,
+      paidTrafficIndicator: null,
+      angleFindings: null,
       metaAdLink: catalog.metaAdLink,
       tiktokAdLink: catalog.tiktokAdLink,
     };
@@ -95,11 +107,15 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
     revenue: null,
     traffic: estimateTrafficFromRank(popularity?.trancoRank ?? null),
     reviews: null,
+    reviewGapBodies: [],
     soldOutRatio: null,
     soldOutVariants: 0,
     totalVariants: 0,
     domainAge,
     popularity,
+    salesSignals: null,
+    paidTrafficIndicator: null,
+    angleFindings: null,
     ...buildAdLinks(domain),
   };
 

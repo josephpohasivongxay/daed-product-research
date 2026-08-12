@@ -45,7 +45,19 @@ export type TrafficEstimate = {
 export type ProductReviews = {
   rating: number | null;
   reviewCount: number | null;
-  source: 'json-ld';
+  /** Reviews dated within the last 90 days, when the source exposes individual review dates (JSON-LD `review[]` with `datePublished`). null = dates weren't available, not zero. */
+  recentReviewCount: number | null;
+  /** 'json-ld' = schema.org AggregateRating. 'widget-embed' = data attributes a review app (Judge.me/Loox/Stamped) server-renders into the page markup, read without calling any app API. */
+  source: 'json-ld' | 'widget-embed';
+};
+
+export type SalesSignals = {
+  /** True when a relevant product also appears in a /collections/best-sellers (or /bestsellers) listing. */
+  isBestsellerListed: boolean;
+  /** True when a "N sold" / "N+ sold recently" style badge text was found on an already-fetched product page. */
+  hasSoldCountBadge: boolean;
+  /** Share of sampled multi-variant relevant products with SOME but not all variants sold out — an organic depletion pattern, as opposed to a bulk delist (all) or nothing moving (none). null when there were no multi-variant products to check. */
+  partialSelloutRatio: number | null;
 };
 
 export type MetaAd = {
@@ -72,13 +84,31 @@ export type MetaAdsSignal = {
 
 export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
 
+/**
+ * v4 model: relevance is no longer a score category — it's a pass/fail gate
+ * applied before a store is even ranked (see RELEVANCE_GATE_* in
+ * lib/relevance.ts). Every category below answers "does this prove real,
+ * replicable sales," not "is this on-topic."
+ */
 export type StoreScoreBreakdown = {
-  /** Reviews + sold-out rate + traffic — direct evidence people buy here. */
-  salesEvidence: number;
-  /** Domain age + recent catalog activity — a real, ongoing operation, not proof of sales by itself. */
-  longevity: number;
-  /** Lexical match strength to the searched niche — a gate, not a demand signal. */
-  relevance: number;
+  /** Reviews (recency-weighted) + inventory depletion + sales-signal proxies — direct purchase evidence. Max 40. */
+  commercialProof: number;
+  /** Domain age weighted toward recent freshness, not just raw longevity. Max 15. */
+  operationalHealth: number;
+  /** Tranco traffic tier. Max 15. */
+  trafficAuthority: number;
+  /** Catalog/SKU depth — investment evidence, not recency-gated. Max 15. */
+  catalogInvestment: number;
+  /** Composite estimate of whether this looks like a small-operator-replicable win vs. a funded brand. Max 15. */
+  replicability: number;
+};
+
+export type CommercialProofDetail = {
+  reviewEvidence: number;
+  inventoryDepletion: number;
+  salesProxies: number;
+  /** True when review data was a total miss and its 20-point share was redistributed into inventory/salesProxies instead of penalizing the store for missing data. */
+  reviewDataRedistributed: boolean;
 };
 
 export type ScoreLabel = 'Extremely Validated' | 'Highly Validated' | 'Validated' | 'Uncertain' | 'Weak';
@@ -86,7 +116,17 @@ export type ScoreLabel = 'Extremely Validated' | 'Highly Validated' | 'Validated
 export type StoreScore = {
   total: number;
   breakdown: StoreScoreBreakdown;
+  commercialProofDetail: CommercialProofDetail;
   label: ScoreLabel;
+};
+
+export type AngleFindings = {
+  /** 2-3★ review text snippets, when the store's structured data exposes individual review bodies — pulled, not fabricated. */
+  reviewGaps: string[];
+  /** True only when at least one usable 2-3★ review snippet was actually extracted — false covers both "no review text exposed by this store's data source" and "exposed, but nothing in that range," since this tool can't tell those apart from structured data alone. */
+  reviewGapsAvailable: boolean;
+  pricePosition: string;
+  replicabilityNote: string;
 };
 
 export type StoreResult = {
@@ -108,12 +148,19 @@ export type StoreResult = {
   revenue: RevenueEstimate | null;
   traffic: TrafficEstimate | null;
   reviews: ProductReviews | null;
+  /** Raw 2-3★ review text pulled from structured data, when available — always populated (possibly empty); lib/angleFindings.ts curates this into angleFindings.reviewGaps for the top 10. */
+  reviewGapBodies: string[];
   /** Share of sampled variants marked unavailable — a free proxy for sell-through. */
   soldOutRatio: number | null;
   soldOutVariants: number;
   totalVariants: number;
   domainAge: DomainAge | null;
   popularity: Popularity | null;
+  salesSignals: SalesSignals | null;
+  /** true = active Meta/Facebook ads detected, false = checked and none found, null = not checked (only checked for stores that clear the relevance gate in a niche search). Display flag — not scored directly except as one input to the Replicability Flag. */
+  paidTrafficIndicator: boolean | null;
+  /** Only populated for the top 10 stores by score in a given search — see lib/angleFindings.ts. */
+  angleFindings: AngleFindings | null;
   score: StoreScore;
   metaAdLink: string;
   tiktokAdLink: string;
