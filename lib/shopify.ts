@@ -124,26 +124,31 @@ function computePartialSelloutRatio(products: ShopifyProduct[]): number | null {
 
 const BESTSELLER_COLLECTION_HANDLES = ['best-sellers', 'bestsellers', 'best-seller'];
 
-async function fetchBestsellerHandles(domain: string): Promise<Set<string> | null> {
-  for (const handle of BESTSELLER_COLLECTION_HANDLES) {
-    try {
-      const res = await fetch(`https://${domain}/collections/${handle}/products.json?limit=250`, {
-        headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) continue;
-      if (!(res.headers.get('content-type') || '').includes('json')) continue;
+async function fetchBestsellerHandlesForSlug(domain: string, handle: string): Promise<Set<string> | null> {
+  try {
+    const res = await fetch(`https://${domain}/collections/${handle}/products.json?limit=250`, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    if (!(res.headers.get('content-type') || '').includes('json')) return null;
 
-      const data: ShopifyProductsResponse = await res.json();
-      const products = data.products;
-      if (!Array.isArray(products) || products.length === 0) continue;
+    const data: ShopifyProductsResponse = await res.json();
+    const products = data.products;
+    if (!Array.isArray(products) || products.length === 0) return null;
 
-      return new Set(products.map((p) => p.handle).filter((h): h is string => Boolean(h)));
-    } catch {
-      // try the next handle convention
-    }
+    return new Set(products.map((p) => p.handle).filter((h): h is string => Boolean(h)));
+  } catch {
+    return null;
   }
-  return null;
+}
+
+/** Tries every handle convention concurrently (not sequentially — most stores match none, and sequential 5s-timeout misses would otherwise cost up to 15s per store), keeping the first match in convention-priority order. */
+async function fetchBestsellerHandles(domain: string): Promise<Set<string> | null> {
+  const attempts = await Promise.all(
+    BESTSELLER_COLLECTION_HANDLES.map((handle) => fetchBestsellerHandlesForSlug(domain, handle))
+  );
+  return attempts.find((result) => result !== null) ?? null;
 }
 
 /**

@@ -18,11 +18,21 @@ import type { CommunitySource, DemandSignal, Platform, SearchResponse, StoreResu
 export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
 
-const CANDIDATE_LIMIT = 30;
-// Each candidate now does several direct fetches (catalog, review pages,
+// Discovery runs 5 query variants through Tavily (~20 results each) and
+// merges/dedupes the domains into one pool, capped here. This used to be
+// capped at 30, which meant a niche with many more genuine stores than
+// that still only ever got 30 candidates considered *before* the
+// relevance gate even ran — raised to actually reflect what Tavily found
+// instead of truncating it early.
+const CANDIDATE_LIMIT = 60;
+// Each candidate does several direct fetches (catalog, review pages,
 // bestseller collection, domain age, popularity) — bounding how many run
-// at once keeps a 30-candidate search from firing 150+ requests together.
-const CANDIDATE_CONCURRENCY = 8;
+// at once keeps a 60-candidate search from firing hundreds of requests
+// together. The per-store fetches this bounds are now internally
+// concurrent too (see lib/reviews.ts, lib/shopify.ts), so raising the
+// candidate pool doesn't multiply worst-case per-store latency the way it
+// would have before.
+const CANDIDATE_CONCURRENCY = 10;
 const ANGLE_FINDINGS_COUNT = 10;
 const PAID_TRAFFIC_CONCURRENCY = 4;
 

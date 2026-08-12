@@ -159,8 +159,10 @@ Uncertain, 0–39 Weak. The **"Validated only" filter defaults on** and shows st
   (10→20 each) so a store isn't structurally capped below others just because it lacks a review
   app; it has to earn those points from inventory/sales-proxy evidence instead.
 - **Inventory depletion (10)** — sold-out variant share from `products.json`. Downweighted 50%
-  when there's no corroborating review evidence, since sold-out alone is ambiguous (could reflect
-  poor restocking, not demand).
+  only when review data was actually found and shows zero reviews (a real negative signal — sold-
+  out alone is ambiguous, could reflect poor restocking, not demand). When review data is simply
+  unavailable (the common case), inventory evidence is NOT downweighted — a missing data point on
+  one signal must never quietly penalize a completely different one.
 - **Sales-signal proxies (10)** — bestseller-collection placement (does a relevant product also
   appear in the store's own `/collections/best-sellers`?), "N sold" style badge text found on an
   already-fetched product page, and a partial-variant-sellout pattern (some but not all variants
@@ -387,7 +389,10 @@ zero results for niches that clearly have stores, that parsing is the first plac
 
 Query expansion means each search can issue up to 5 Tavily calls (fewer if the base query
 already fails), so check your Tavily dashboard for how far your plan's quota goes. Discovery
-pulls up to 30 candidate domains per search.
+merges and dedupes across all 5 variants and pulls up to 60 candidate domains per search
+(`CANDIDATE_LIMIT` in `app/api/search/route.ts`) — raised from an earlier 30, which was silently
+truncating the candidate pool before the relevance gate even ran, well below what a niche with
+many real competitors actually has discoverable.
 
 ## Getting started
 
@@ -409,9 +414,12 @@ Open [http://localhost:3000](http://localhost:3000). Copy `.env.example` to `.en
    completed Meta's identity verification (see above) to enable the ads section on store pages.
 
 Heavier searches (relevance scoring, domain age, popularity, and review lookups per candidate)
-take longer than a plain search — `maxDuration` is set to 45s. If you hit Vercel's function
-timeout on the Hobby plan, the fix is either upgrading to a plan with a longer limit or reducing
-the candidate count in `app/api/search/route.ts`.
+take longer than a plain search — `maxDuration` is set to 45s. Per-candidate fetches that used to
+run sequentially (the review-page waterfall, the bestseller-collection handle attempts) now run
+concurrently instead, so raising `CANDIDATE_LIMIT` doesn't multiply per-store worst-case latency
+the way it used to. If you still hit Vercel's function timeout on the Hobby plan, the fix is
+either upgrading to a plan with a longer limit or reducing `CANDIDATE_LIMIT` in
+`app/api/search/route.ts`.
 
 ## Project structure
 

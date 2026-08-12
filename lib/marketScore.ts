@@ -34,11 +34,15 @@ function reviewTierCredit(reviewCount: number): number {
 /**
  * Commercial Proof (40 pts) — Review Evidence 20 + Inventory Depletion 10 +
  * Sales-Signal Proxies 10, EXCEPT when review data is a total miss (not
- * "0 reviews found," but "no review data at all"): its 20-point share is
- * redistributed proportionally into the other two (10→20 each), so a store
- * with genuinely no review-app data isn't structurally capped below one
- * that happens to have Judge.me installed — it just has to prove itself
- * through inventory/sales-proxy evidence instead.
+ * "0 reviews found," but "no review data at all" — common, since most
+ * stores don't expose JSON-LD or a matched widget-embed pattern): its
+ * 20-point share is redistributed proportionally into the other two
+ * (10→20 each), so a store with genuinely no review-app data isn't
+ * structurally capped below one that happens to have Judge.me installed —
+ * it just has to prove itself through inventory/sales-proxy evidence
+ * instead, AT FULL WEIGHT. Missing review data must never quietly touch
+ * any other signal's weighting — only an explicit, found-but-zero review
+ * count (a real negative signal) downweights inventory depletion below.
  */
 function computeCommercialProof(store: Omit<StoreResult, 'score'>): {
   total: number;
@@ -66,13 +70,18 @@ function computeCommercialProof(store: Omit<StoreResult, 'score'>): {
   }
 
   // Sold-out rate alone is ambiguous (could be poor restocking, not
-  // demand) — downweight it when there's no review evidence corroborating
-  // that people are actually buying here.
-  const hasCorroboratingReviews = !reviewDataRedistributed && (store.reviews!.reviewCount ?? 0) > 0;
+  // demand) — downweight it ONLY when review data was actually found and
+  // it shows zero reviews, a real (if soft) negative signal. When review
+  // data is simply unavailable (reviewDataRedistributed), there's nothing
+  // to corroborate OR contradict, so inventory evidence counts at full
+  // (doubled) weight instead of being silently halved on top of already
+  // losing its review-evidence share — a store's data gap shouldn't
+  // compound into a second penalty on a completely different signal.
+  const reviewsKnownWeak = !reviewDataRedistributed && (store.reviews!.reviewCount ?? 0) === 0;
   let inventoryDepletion = 0;
   if (store.soldOutRatio !== null) {
     inventoryDepletion = store.soldOutRatio * inventoryCap;
-    if (!hasCorroboratingReviews) inventoryDepletion *= 0.5;
+    if (reviewsKnownWeak) inventoryDepletion *= 0.5;
     inventoryDepletion = Math.min(inventoryCap, inventoryDepletion);
   }
 

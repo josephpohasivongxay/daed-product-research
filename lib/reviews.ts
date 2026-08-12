@@ -212,19 +212,22 @@ async function fetchProductPageEvidence(productUrl: string): Promise<ProductPage
 }
 
 /**
- * Tries candidate product URLs in order (cheapest first), merging evidence
- * across them: the first page with real review data wins for rating/count,
- * but a sold-count badge or gap-mining text found on ANY checked page
- * still counts — different product pages on the same store often carry
- * different partial evidence.
+ * Checks candidate product URLs concurrently (not sequentially — with a
+ * 5s timeout per page, three misses in a row would otherwise cost up to
+ * 15s for a single store), then merges evidence in URL priority order:
+ * the first (in the original, cheapest-first order) page with real review
+ * data wins for rating/count, but a sold-count badge or gap-mining text
+ * found on ANY checked page still counts — different product pages on the
+ * same store often carry different partial evidence.
  */
 export async function fetchBestAvailableEvidence(productUrls: string[]): Promise<ProductPageEvidence> {
+  const pageResults = await Promise.all(productUrls.map((url) => fetchProductPageEvidence(url)));
+
   let reviews: ProductReviews | null = null;
   let reviewGapBodies: string[] = [];
   let hasSoldCountBadge = false;
 
-  for (const url of productUrls) {
-    const result = await fetchProductPageEvidence(url);
+  for (const result of pageResults) {
     if (!result) continue;
 
     if (!reviews && result.reviews && (result.reviews.reviewCount !== null || result.reviews.rating !== null)) {
@@ -232,8 +235,6 @@ export async function fetchBestAvailableEvidence(productUrls: string[]): Promise
       reviewGapBodies = result.reviewGapBodies;
     }
     if (result.hasSoldCountBadge) hasSoldCountBadge = true;
-
-    if (reviews && hasSoldCountBadge) break;
   }
 
   return { reviews, reviewGapBodies, hasSoldCountBadge };
