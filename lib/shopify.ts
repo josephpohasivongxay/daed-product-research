@@ -30,8 +30,10 @@ export type ShopifyCatalogData = {
   productsSample: number;
   catalogSizeIsApproximate: boolean;
   sampleProducts: SampleProduct[];
-  /** Best relevant product page URL, used for review extraction. */
+  /** Best relevant product page URLs, used for review extraction. */
   topProductUrls: string[];
+  /** Title + short description snippet of top relevant products, for niche-wide selling-angle extraction. */
+  keywordSnippets: string[];
   relevancePercent: number;
   relevantProductCount: number;
   priceStats: PriceStats | null;
@@ -42,6 +44,10 @@ export type ShopifyCatalogData = {
   metaAdLink: string;
   tiktokAdLink: string;
 };
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 function productTags(product: ShopifyProduct): string[] {
   if (Array.isArray(product.tags)) return product.tags;
@@ -139,9 +145,15 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
     }));
 
     const topProductUrls = displayPool
-      .slice(0, 2)
+      .slice(0, 3)
       .filter((p) => p.handle)
       .map((p) => `https://${domain}/products/${p.handle}`);
+
+    const keywordSnippets = displayPool.slice(0, 3).map((p) => {
+      const title = p.title || '';
+      const description = p.body_html ? stripHtml(p.body_html).slice(0, 200) : '';
+      return [title, description].filter(Boolean).join('. ');
+    });
 
     const priceStats = computePriceStats(pricingPool);
     const soldOutStats = computeSoldOutStats(products);
@@ -153,6 +165,7 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
       catalogSizeIsApproximate: products.length >= CATALOG_SAMPLE_LIMIT,
       sampleProducts,
       topProductUrls,
+      keywordSnippets,
       relevancePercent,
       relevantProductCount,
       priceStats,

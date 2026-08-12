@@ -8,6 +8,7 @@ import { buildMarketEvidence } from '@/lib/marketEvidence';
 import { generateVerdict } from '@/lib/verdict';
 import { computePricingGap } from '@/lib/opportunity';
 import { computeMarketFit } from '@/lib/marketFit';
+import { computeCommonAngles } from '@/lib/angles';
 import type { CommunitySource, DemandSignal, Platform, SearchResponse, StoreResult } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
       .filter((v): v is number => v !== undefined && v !== null);
     const pricingGap = computePricingGap(relevantAvgPrices);
     const marketFit = computeMarketFit(evidence, demand, pricingGap, results);
+    const commonAngles = computeCommonAngles(results, niche);
 
     const body: SearchResponse = {
       success: true,
@@ -77,7 +79,7 @@ export async function GET(request: Request) {
       candidatesScanned: domains.length,
       results,
       demand,
-      market: { score: marketScore, evidence, verdict, pricingGap },
+      market: { score: marketScore, evidence, verdict, pricingGap, commonAngles },
       marketFit,
     };
 

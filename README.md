@@ -120,6 +120,17 @@ exists, not automatically a red flag — the score only pulls back slightly at e
 (15+ relevant stores) to reflect real crowding risk. Interpretation bands: 90–100 Extremely
 Validated, 75–89 Highly Validated, 60–74 Validated, 40–59 Uncertain, 0–39 Weak.
 
+**Commercial Proof is scored proportionally, not against a fixed store count.** An earlier
+version required 5 stores at Tranco's "high"/"very high" traffic tier (top 100K/10K globally)
+and 5 stores with 100+ reviews before contributing meaningful points — bars that are unrealistic
+for a real niche search, which often surfaces well under 5 relevant stores total, and where even
+a genuinely successful niche DTC brand rarely cracks the global top 100K. That made the score
+read as near-zero on almost every search, which was a scoring bug, not evidence of a weak
+market. It's now scored as a fraction of the relevant stores actually found: traffic credit is
+weighted by tier (partial credit for "moderate"/"low" tiers, not just "high"/"very high"), review
+credit scales with how many relevant stores show *any* reviews vs. 50+, and sold-out rate is
+unchanged. `lib/marketScore.ts` has the full formula.
+
 ## Free demand & commercial-proof signals
 
 - **Sold-out rate** — share of sampled variants marked unavailable, computed from data already
@@ -181,6 +192,18 @@ that with TikTok, there's a **TikTok panel** on the results page (niche-level, n
 how this was asked for) with direct links to search TikTok and its Creative Center trends page —
 an honest one-click manual check, not live numbers.
 
+## Common selling angles — what competitors' copy has in common
+
+The Market Validation panel includes a "Common selling angles" tag list — marketing/positioning
+terms (single words and two-word phrases) that show up in product titles/descriptions across
+**2 or more** relevant stores, e.g. "eco friendly," "sustainable materials," "cold plunge." This
+uses text already fetched during discovery (`lib/angles.ts`), no extra requests. A term one store
+uses once is that store's own copy, not surfaced — it has to repeat across multiple competitors
+to count as a common angle. This is **lexical, not strategic**: it counts repeated words, it
+doesn't understand marketing strategy or read positioning the way a person would. Treat it as a
+prompt for what to look at manually (open a few of the stores using a given term and see how
+they're actually using it), not a finished competitive-positioning analysis.
+
 ## What's intentionally not automated (and why)
 
 - **Social follower counts** (Instagram/TikTok/YouTube). Official APIs need business-account
@@ -194,9 +217,10 @@ an honest one-click manual check, not live numbers.
   here is mechanical (shop/buy/site: phrasings of the exact term), not semantic. A curated
   synonym dictionary was considered and rejected — it would only work for a handful of
   hand-picked niches and silently do nothing for the rest.
-- **Positioning/branding/UX gap analysis.** The one opportunity signal implemented is a
-  data-driven pricing-cluster gap (`lib/opportunity.ts`); the more subjective gaps (weak
-  branding, poor UX) would need either an LLM read of each store or manual review.
+- **Real positioning/branding/UX gap analysis.** The pricing-cluster gap (`lib/opportunity.ts`)
+  and the common-angles tag list (`lib/angles.ts`) are both data-driven proxies; a genuine read of
+  "this brand's positioning is weak" or "their UX loses customers" needs either an LLM read of
+  each store or manual review — text-frequency counting isn't a substitute for that judgment.
 
 ## ⚠️ Search requires Tavily — there is no fallback
 
@@ -290,7 +314,8 @@ lib/
 ├── marketFit.ts                                                          # TAM/SAM/SOM + ship/tweak/kill
 ├── verdict.ts                                                              # Evidence-driven verdict text
 ├── opportunity.ts                                                            # Pricing-gap analysis
-├── sortFilter.ts                                                              # Client sort/filter
+├── angles.ts                                                                   # Common selling-angle extraction
+├── sortFilter.ts                                                                 # Client sort/filter
 ├── format.ts                                                                    # Display formatting
 └── types.ts
 ```

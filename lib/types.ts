@@ -96,6 +96,8 @@ export type StoreResult = {
   catalogSizeIsApproximate: boolean;
   sampleProducts: SampleProduct[];
   topProductUrl: string | null;
+  /** Title + short description text of top relevant products (or homepage title/description for non-Shopify), for niche-wide selling-angle extraction. */
+  keywordSnippets: string[];
   /** 0-100 lexical match strength between the catalog and the searched niche. */
   relevancePercent: number;
   relevantProductCount: number;
@@ -184,6 +186,8 @@ export type MarketValidation = {
   evidence: MarketEvidence;
   verdict: MarketVerdict;
   pricingGap: PricingGap | null;
+  /** Recurring marketing/positioning terms across relevant stores' product copy — lexical, not semantic. */
+  commonAngles: string[];
 };
 
 export type TamSizeLabel = 'Small' | 'Medium' | 'Large';

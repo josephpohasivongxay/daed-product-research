@@ -27,7 +27,7 @@ function EvidenceStat({ label, value }: { label: string; value: string }) {
 }
 
 export default function MarketValidationPanel({ market, niche }: { market: MarketValidation; niche: string }) {
-  const { score, evidence, verdict, pricingGap } = market;
+  const { score, evidence, verdict, pricingGap, commonAngles } = market;
   const labelColor = LABEL_COLOR[score.label];
   const platformEntries = Object.entries(evidence.platformBreakdown).filter(([, count]) => (count ?? 0) > 0);
 
@@ -109,6 +109,28 @@ export default function MarketValidationPanel({ market, niche }: { market: Marke
           <p className="text-xs text-slate-500">
             <span className="font-medium text-slate-400">Pricing gap: </span>
             {pricingGap.note}
+          </p>
+        </div>
+      )}
+
+      {commonAngles.length > 0 && (
+        <div className="border-t border-slate-800 mt-4 pt-4">
+          <p className="text-xs font-medium text-slate-400 mb-2">
+            Common selling angles across relevant stores
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {commonAngles.map((angle) => (
+              <span
+                key={angle}
+                className="rounded-full bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300"
+              >
+                {angle}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-600 mt-2">
+            Terms repeated in product titles/descriptions across 2+ relevant stores — a lexical
+            pattern, not a strategic read of positioning.
           </p>
         </div>
       )}

@@ -28,9 +28,13 @@ export function computeStoreScore(store: Omit<StoreResult, 'score'>): StoreScore
   let commercialProof = 0;
   const reviewCount = store.reviews?.reviewCount ?? null;
   if (reviewCount !== null) {
-    if (reviewCount >= 1000) commercialProof += 15;
-    else if (reviewCount >= 100) commercialProof += 10;
-    else if (reviewCount >= 10) commercialProof += 5;
+    // A real niche DTC store with any visible reviews at all is already
+    // meaningful evidence — 1000+ reviews is storefront-of-a-major-brand
+    // territory, not a realistic bar for most stores this tool finds.
+    if (reviewCount >= 500) commercialProof += 15;
+    else if (reviewCount >= 50) commercialProof += 11;
+    else if (reviewCount >= 10) commercialProof += 7;
+    else if (reviewCount > 0) commercialProof += 3;
   }
   if (store.soldOutRatio !== null) commercialProof += store.soldOutRatio * 10;
   commercialProof = Math.round(Math.min(25, commercialProof));
@@ -85,16 +89,40 @@ export function computeMarketScore(results: StoreResult[], demandSignal: DemandS
   const communityDemand = Math.min(1, totalCommunityMentions / 30) * 5;
   const demand = Math.round(storeCountDemand + trendDemand + communityDemand);
 
-  // Commercial Proof
-  const highTrafficCount = relevantStores.filter(
-    (r) => r.traffic?.tier === 'high' || r.traffic?.tier === 'very high'
-  ).length;
-  const trafficProof = Math.min(1, highTrafficCount / 5) * 10;
-  const reviewedStores = relevantStores.filter((r) => (r.reviews?.reviewCount ?? 0) >= 100).length;
-  const reviewProof = Math.min(1, reviewedStores / 5) * 10;
+  // Commercial Proof — proportional to how many relevant stores were
+  // actually found, not a fixed "5 stores needed" bar. A real niche search
+  // often surfaces well under 5 relevant stores total, and Tranco's
+  // "high"/"very high" tiers (top 100K/10K globally) are a bar almost no
+  // niche DTC store clears even when it's genuinely doing well — the old
+  // formula effectively required a 5-competitor market of top-100K-global
+  // sites to ever score above near-zero, which isn't what "commercial
+  // proof of a real niche" looks like.
+  const TRAFFIC_TIER_WEIGHT: Record<string, number> = {
+    'very high': 1,
+    high: 0.8,
+    moderate: 0.5,
+    low: 0.25,
+    minimal: 0.1,
+  };
+  const storesWithTraffic = relevantStores.filter((r) => r.traffic !== null);
+  const trafficProof = storesWithTraffic.length
+    ? (storesWithTraffic.reduce((sum, r) => sum + (TRAFFIC_TIER_WEIGHT[r.traffic!.tier] ?? 0), 0) /
+        storesWithTraffic.length) *
+      8
+    : 0;
+
+  const storesWithAnyReviews = relevantStores.filter((r) => (r.reviews?.reviewCount ?? 0) > 0);
+  const storesWithStrongReviews = relevantStores.filter((r) => (r.reviews?.reviewCount ?? 0) >= 50);
+  const reviewProof =
+    storeCount > 0
+      ? Math.min(1, storesWithAnyReviews.length / storeCount) * 7 +
+        Math.min(1, storesWithStrongReviews.length / storeCount) * 5
+      : 0;
+
   const soldOutValues = relevantStores.map((r) => r.soldOutRatio).filter((v): v is number => v !== null);
   const avgSoldOut = soldOutValues.length ? soldOutValues.reduce((a, b) => a + b, 0) / soldOutValues.length : 0;
   const soldOutProof = avgSoldOut * 5;
+
   const commercialProof = Math.round(Math.min(25, trafficProof + reviewProof + soldOutProof));
 
   // Competition / Market Structure — additive, not punitive
