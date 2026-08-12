@@ -1,4 +1,4 @@
-import { fetchShopifyCatalog, fetchBestsellerOverlap } from './shopify';
+import { fetchShopifyCatalog, fetchBestsellerHandleSet } from './shopify';
 import { fetchDomainAge } from './domainAge';
 import { fetchPopularity } from './popularity';
 import { fetchHomepageSignal } from './platformDetect';
@@ -32,10 +32,22 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
   ]);
 
   if (catalog) {
-    const [evidence, isBestsellerListed] = await Promise.all([
+    const [evidence, bestsellerHandles] = await Promise.all([
       fetchBestAvailableEvidence(catalog.topProductUrls),
-      fetchBestsellerOverlap(domain, catalog.relevantHandles),
+      fetchBestsellerHandleSet(domain),
     ]);
+    const isBestsellerListed = bestsellerHandles
+      ? catalog.relevantHandles.some((h) => bestsellerHandles.has(h))
+      : false;
+    // Same handle set answers both "is this store bestseller-backed at all"
+    // (salesSignals, feeds Commercial Proof) and "which SPECIFIC sample
+    // products are bestsellers" (feeds the Winning Products view) — one
+    // fetch, two uses.
+    const sampleProducts = catalog.sampleProducts.map((p) => ({
+      ...p,
+      isBestseller: Boolean(p.handle && bestsellerHandles?.has(p.handle)),
+    }));
+
     const traffic = estimateTrafficFromRank(popularity?.trancoRank ?? null);
     const revenue = estimateMonthlyRevenue({
       traffic,
@@ -53,7 +65,7 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
       platform: 'shopify',
       productsSample: catalog.productsSample,
       catalogSizeIsApproximate: catalog.catalogSizeIsApproximate,
-      sampleProducts: catalog.sampleProducts,
+      sampleProducts,
       topProductUrl: catalog.topProductUrls[0] ?? null,
       keywordSnippets: catalog.keywordSnippets,
       relevancePercent: catalog.relevancePercent,
@@ -71,6 +83,7 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
       popularity,
       salesSignals,
       paidTrafficIndicator: null,
+      metaAdSummary: null,
       angleFindings: null,
       metaAdLink: catalog.metaAdLink,
       tiktokAdLink: catalog.tiktokAdLink,
@@ -115,6 +128,7 @@ export async function buildStoreResult(domain: string, niche: string): Promise<S
     popularity,
     salesSignals: null,
     paidTrafficIndicator: null,
+    metaAdSummary: null,
     angleFindings: null,
     ...buildAdLinks(domain),
   };

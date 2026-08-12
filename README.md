@@ -66,6 +66,10 @@ weight than any single number.
 11. A **Market Fit Analysis** panel runs first, above everything else — TAM/SAM/SOM, demand,
     competitive landscape, and willingness-to-pay, rolled into a Ship/Tweak/Kill verdict. See
     below for what this is and how it differs from the Market Validation Score.
+12. Results default to a **Winning Products** view — a visual, product-centric feed (image, price,
+    store attribution) instead of a store list, closer to how ad-spy/product-research tools like
+    WinningHunter present results. A **Stores** tab switches back to the store-list view described
+    above. See "Winning Products view" below for what "winning" means here and its limits.
 
 ## Market Fit Analysis (TAM/SAM/SOM + Ship/Tweak/Kill)
 
@@ -226,6 +230,36 @@ extra credit) — visible on the store detail page under "Angle-finding notes":
 - **Replicability context** — a plain-language note on why the Replicability score landed where it
   did, referencing catalog size, paid-ad detection, and domain age.
 
+## Winning Products view
+
+Inspired by ad-spy/"winning products" tools like WinningHunter — but built honestly around what
+this app can actually verify for free. Those tools center on ad-spend and per-product ad databases
+(500k+ FB ads/day, TikTok ad libraries); Meta's public Ad Library doesn't expose spend for ordinary
+commercial ads and there's no free TikTok ad API, so full parity isn't possible here. What's built
+instead, from data this tool already has:
+
+- **Product-centric browsing, by default.** `lib/winningProducts.ts` flattens every relevant
+  product across every store in a search into one ranked, visual feed (image, price, store
+  attribution) — the "Winning Products" tab, shown before the store list. A **Stores** tab switches
+  back to the original store-by-store list.
+- **Honest ranking, not a fake per-product score.** There's no free per-product review or ad data
+  (Shopify's `products.json` has no review counts; Meta's Ad Library is per-Page, not per-SKU), so
+  ranking blends what IS real at the product level (bestseller-collection listing, this specific
+  product's sold-out share) with its store's Validation Score and Ad Momentum — never presented as
+  more precise than that blend actually is.
+- **Real ad numbers on every card**, not just a yes/no flag — active ad count and longest-running
+  days now show directly on store cards and the product feed (`metaAdSummary` on `StoreResult`),
+  matching how WinningHunter surfaces ad data inline rather than a click away.
+- **Ad Momentum** (`lib/adMomentum.ts`) — a display label derived from that same ad data:
+  **Proven winner** (an ad still running 60+ days — the strongest free proxy for "still
+  converting," since Meta doesn't expose spend), **Scaling** (3+ concurrent active ads), or
+  **Testing** (1-2 active ads). This is deliberately a *display* signal, not folded into the
+  100-point Store Validation Score — active ad spend reads as a NEGATIVE there (a funded-brand
+  signal that lowers Replicability), while WinningHunter-style tools treat it as pure positive
+  proof. Both readings are legitimate for different questions ("is this store a realistic model to
+  copy" vs. "is this specific product currently winning"), so this tool shows both instead of
+  picking one.
+
 ## The Market Validation Score
 
 Niche-level, 0–100 — a different question from the Store Validation Score above ("is there
@@ -297,11 +331,12 @@ unchanged. `lib/marketScore.ts` has the full formula.
 
 Each store's detail page can show its active Facebook/Instagram ads (count, how long each has
 been running, creative snippet, a link to view it) via Meta's **Ad Library API**. The same lookup
-also feeds the **paid-traffic indicator** shown on every store card/detail page once a niche
-search's results are gated — true (active ads found) / false (checked, none found) / not shown at
-all (unchecked, e.g. no token configured). It's a display flag and a Replicability input, never
-scored on its own. In a niche search it's only checked for stores that already cleared the
-relevance gate, with a small concurrency limit (`PAID_TRAFFIC_CONCURRENCY` in
+also feeds, on every store card/detail page and in the Winning Products feed once a niche search's
+results are gated: the **paid-traffic indicator** (true/false/not checked — a Replicability input,
+never scored on its own) and **`metaAdSummary`** (real active-ad count + longest-running days,
+shown inline rather than behind a click), which together drive the **Ad Momentum** label (see
+"Winning Products view" above). In a niche search this is only checked for stores that already
+cleared the relevance gate, with a small concurrency limit (`PAID_TRAFFIC_CONCURRENCY` in
 `app/api/search/route.ts`), so it doesn't fan out to every discovered candidate.
 
 This is genuinely free with no paid tier — but **using it requires the account owner to personally
@@ -433,13 +468,14 @@ app/
 ├── page.tsx                             # Dashboard: search, market panel, sort/filter, results
 └── globals.css
 components/
-├── MarketFitPanel.tsx             # TAM/SAM/SOM + Ship/Tweak/Kill (renders first)
-├── MarketValidationPanel.tsx        # Score breakdown, evidence stats, verdict, pricing gap
-├── DemandPanel.tsx                    # Trend sparkline + community mention chips
-├── TikTokPanel.tsx                      # Manual-check links (no live data — see above)
-├── StoreCard.tsx                          # Catalog card per verified store (score, evidence)
-├── StoreDetailView.tsx                      # Full store breakdown + Meta ads section
-└── SortFilterBar.tsx                          # Sort dropdown + price/product-count/age filters
+├── MarketFitPanel.tsx            # TAM/SAM/SOM + Ship/Tweak/Kill (renders first)
+├── MarketValidationPanel.tsx       # Score breakdown, evidence stats, verdict, pricing gap
+├── DemandPanel.tsx                   # Trend sparkline + community mention chips
+├── TikTokPanel.tsx                     # Manual-check links (no live data — see above)
+├── WinningProductsFeed.tsx               # Product-centric feed, default results view
+├── StoreCard.tsx                           # Catalog card per verified store (score, ad momentum)
+├── StoreDetailView.tsx                       # Full store breakdown + Meta ads section
+└── SortFilterBar.tsx                           # Sort dropdown + price/product-count/age filters
 lib/
 ├── queryExpansion.ts                             # Mechanical query variant generation
 ├── discovery.ts                                    # Tavily search, merged query variants
@@ -454,17 +490,19 @@ lib/
 ├── trends.ts                                                         # Google Trends niche signal
 ├── community.ts                                                        # Pluggable Reddit/HN mentions
 ├── metaAds.ts                                                            # Meta Ad Library + paid-traffic indicator
-├── buildStoreResult.ts                                                     # Shared per-domain enrichment
-├── concurrency.ts                                                            # Bounded-concurrency fetch helper
-├── angleFindings.ts                                                            # Top-10 review-gap/price-position/replicability notes
-├── marketScore.ts                                                                # Store (v4, 5-category) + market 0-100 scoring
-├── marketEvidence.ts                                                               # Niche-level evidence roll-up
-├── marketFit.ts                                                                      # TAM/SAM/SOM + ship/tweak/kill
-├── verdict.ts                                                                          # Evidence-driven verdict text
-├── opportunity.ts                                                                        # Pricing-gap analysis
-├── angles.ts                                                                               # Common selling-angle extraction
-├── sortFilter.ts                                                                             # Client sort/filter
-├── format.ts                                                                                   # Display formatting
+├── adMomentum.ts                                                           # Ad Momentum display label (not scored)
+├── buildStoreResult.ts                                                       # Shared per-domain enrichment
+├── concurrency.ts                                                              # Bounded-concurrency fetch helper
+├── angleFindings.ts                                                              # Top-10 review-gap/price-position/replicability notes
+├── winningProducts.ts                                                              # Flattens results into the ranked Winning Products feed
+├── marketScore.ts                                                                    # Store (v4, 5-category) + market 0-100 scoring
+├── marketEvidence.ts                                                                   # Niche-level evidence roll-up
+├── marketFit.ts                                                                          # TAM/SAM/SOM + ship/tweak/kill
+├── verdict.ts                                                                              # Evidence-driven verdict text
+├── opportunity.ts                                                                            # Pricing-gap analysis
+├── angles.ts                                                                                   # Common selling-angle extraction
+├── sortFilter.ts                                                                                 # Client sort/filter
+├── format.ts                                                                                       # Display formatting
 └── types.ts
 ```
 

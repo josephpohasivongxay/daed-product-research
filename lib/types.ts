@@ -2,6 +2,14 @@ export type SampleProduct = {
   title: string;
   price: string;
   image: string;
+  /** Product page URL, or null if the store's handle was missing. */
+  url: string | null;
+  /** Product page handle — cross-referenced against a bestseller-collection check. */
+  handle: string | null;
+  /** Share of THIS product's sampled variants marked unavailable. null when availability wasn't tracked for it. */
+  soldOutRatio: number | null;
+  /** True when this specific product also appears in the store's own best-sellers collection. */
+  isBestseller: boolean;
 };
 
 export type PriceStats = {
@@ -82,6 +90,12 @@ export type MetaAdsSignal = {
   searchedAs: string;
 };
 
+/** Lightweight summary of MetaAdsSignal, carried on StoreResult so cards can show real ad numbers without shipping the full ad list to every result. */
+export type MetaAdSummary = {
+  activeCount: number;
+  longestRunningDays: number | null;
+};
+
 export type Platform = 'shopify' | 'woocommerce' | 'bigcommerce' | 'magento' | 'wix' | 'squarespace' | 'custom' | 'unknown';
 
 /**
@@ -159,6 +173,8 @@ export type StoreResult = {
   salesSignals: SalesSignals | null;
   /** true = active Meta/Facebook ads detected, false = checked and none found, null = not checked (only checked for stores that clear the relevance gate in a niche search). Display flag — not scored directly except as one input to the Replicability Flag. */
   paidTrafficIndicator: boolean | null;
+  /** Real ad count + longest-running days, populated alongside paidTrafficIndicator. null = not checked. See lib/adMomentum.ts for the derived label shown on cards. */
+  metaAdSummary: MetaAdSummary | null;
   /** Only populated for the top 10 stores by score in a given search — see lib/angleFindings.ts. */
   angleFindings: AngleFindings | null;
   score: StoreScore;
@@ -290,6 +306,30 @@ export type MarketFit = {
   verdict: MarketFitVerdict;
 };
 
+/** Ad Momentum is a display label derived from Meta Ad Library data (active count + longest-running days) — NOT a scored input to the Store Validation Score. 'Proven winner' = an ad still running 60+ days (still converting); 'Scaling' = 3+ concurrent active ads; 'Testing' = 1-2 active ads; null = no active ads detected, or not checked. */
+export type AdMomentumLabel = 'Proven winner' | 'Scaling' | 'Testing' | null;
+
+/**
+ * A single product, flattened out of its store's sampleProducts and paired
+ * with store-level attribution — the product-centric view real evidence
+ * this tool has doesn't exist at true per-product granularity (no per-SKU
+ * reviews or ad data), so "winning-ness" here is honestly a blend of the
+ * PRODUCT's own signals (sold-out share, bestseller-collection listing)
+ * and its STORE's signals (validation score, ad momentum) — never
+ * presented as more precise than that.
+ */
+export type WinningProduct = {
+  title: string;
+  price: string;
+  image: string;
+  url: string | null;
+  storeDomain: string;
+  storeScore: number;
+  soldOutRatio: number | null;
+  isBestseller: boolean;
+  adMomentum: AdMomentumLabel;
+};
+
 export type SearchResponse = {
   success: boolean;
   niche: string;
@@ -298,6 +338,8 @@ export type SearchResponse = {
   /** False when this search was run with the relevance gate off (?gate=off) — results may include weak matches that would normally be filtered out. */
   relevanceGateApplied: boolean;
   results: StoreResult[];
+  /** Individual products flattened across all results, ranked by a blended winning-signal heuristic — see lib/winningProducts.ts. */
+  winningProducts: WinningProduct[];
   demand: DemandSignal;
   market: MarketValidation;
   marketFit: MarketFit;

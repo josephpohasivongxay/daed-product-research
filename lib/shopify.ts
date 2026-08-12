@@ -159,11 +159,8 @@ async function fetchBestsellerHandles(domain: string): Promise<Set<string> | nul
  * degrades to `false`, same as "no evidence found," never blocking the
  * store from otherwise appearing.
  */
-export async function fetchBestsellerOverlap(domain: string, relevantHandles: string[]): Promise<boolean> {
-  if (relevantHandles.length === 0) return false;
-  const bestsellerHandles = await fetchBestsellerHandles(domain);
-  if (!bestsellerHandles) return false;
-  return relevantHandles.some((h) => bestsellerHandles.has(h));
+export async function fetchBestsellerHandleSet(domain: string): Promise<Set<string> | null> {
+  return fetchBestsellerHandles(domain);
 }
 
 /**
@@ -209,11 +206,20 @@ export async function fetchShopifyCatalog(domain: string, niche: string): Promis
     const pricingPool = relevantProductCount > 0 ? ranked.slice(0, relevantProductCount).map((r) => r.item.product) : products;
     const displayPool = relevantProductCount > 0 ? ranked.map((r) => r.item.product) : products;
 
-    const sampleProducts = displayPool.slice(0, RELEVANT_PRODUCT_DISPLAY_COUNT).map((p) => ({
-      title: p.title || 'Untitled product',
-      price: p.variants?.[0]?.price || 'N/A',
-      image: p.images?.[0]?.src || '',
-    }));
+    const sampleProducts = displayPool.slice(0, RELEVANT_PRODUCT_DISPLAY_COUNT).map((p) => {
+      const tracked = (p.variants || []).filter((v) => typeof v.available === 'boolean');
+      const soldOut = tracked.filter((v) => v.available === false).length;
+      return {
+        title: p.title || 'Untitled product',
+        price: p.variants?.[0]?.price || 'N/A',
+        image: p.images?.[0]?.src || '',
+        url: p.handle ? `https://${domain}/products/${p.handle}` : null,
+        handle: p.handle || null,
+        soldOutRatio: tracked.length > 0 ? soldOut / tracked.length : null,
+        // Filled in by buildStoreResult once the store's bestseller-collection handles are known.
+        isBestseller: false,
+      };
+    });
 
     const topProductUrls = displayPool
       .slice(0, 3)

@@ -10,6 +10,7 @@ import { computePricingGap } from '@/lib/opportunity';
 import { computeMarketFit } from '@/lib/marketFit';
 import { computeCommonAngles } from '@/lib/angles';
 import { computeAngleFindings } from '@/lib/angleFindings';
+import { computeWinningProducts } from '@/lib/winningProducts';
 import { fetchMetaAds } from '@/lib/metaAds';
 import { mapWithConcurrency } from '@/lib/concurrency';
 import { passesRelevanceGate } from '@/lib/relevance';
@@ -98,7 +99,10 @@ export async function GET(request: Request) {
     const withPaidTraffic = await mapWithConcurrency(results, PAID_TRAFFIC_CONCURRENCY, async (store) => {
       const metaAds = await fetchMetaAds(store.domain);
       const paidTrafficIndicator = metaAds ? metaAds.activeCount > 0 : null;
-      const updated = { ...store, paidTrafficIndicator };
+      const metaAdSummary = metaAds
+        ? { activeCount: metaAds.activeCount, longestRunningDays: metaAds.longestRunningDays }
+        : null;
+      const updated = { ...store, paidTrafficIndicator, metaAdSummary };
       const { score: _oldScore, ...rest } = updated;
       return { ...rest, score: computeStoreScore(rest) };
     });
@@ -125,6 +129,8 @@ export async function GET(request: Request) {
       topDomains.has(store.domain) ? { ...store, angleFindings: computeAngleFindings(store, relevantAvgPrices) } : store
     );
 
+    const winningProducts = computeWinningProducts(results);
+
     const body: SearchResponse = {
       success: true,
       niche,
@@ -132,6 +138,7 @@ export async function GET(request: Request) {
       candidatesScanned: domains.length,
       relevanceGateApplied: gateEnabled,
       results,
+      winningProducts,
       demand,
       market: { score: marketScore, evidence, verdict, pricingGap, commonAngles },
       marketFit,

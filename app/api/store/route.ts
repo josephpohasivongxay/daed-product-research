@@ -25,7 +25,10 @@ export async function GET(request: Request) {
     }
 
     const paidTrafficIndicator = metaAds ? metaAds.activeCount > 0 : null;
-    const { score: _oldScore, ...rest } = { ...builtStore, paidTrafficIndicator };
+    const metaAdSummary = metaAds
+      ? { activeCount: metaAds.activeCount, longestRunningDays: metaAds.longestRunningDays }
+      : null;
+    const { score: _oldScore, ...rest } = { ...builtStore, paidTrafficIndicator, metaAdSummary };
     const rescored = { ...rest, score: computeStoreScore(rest) };
     const store = {
       ...rescored,

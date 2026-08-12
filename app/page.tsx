@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Radar, Loader2 } from 'lucide-react';
+import { Search, Radar, Loader2, Flame, Store as StoreIcon } from 'lucide-react';
 import StoreCard from '@/components/StoreCard';
+import WinningProductsFeed from '@/components/WinningProductsFeed';
 import SortFilterBar from '@/components/SortFilterBar';
 import DemandPanel from '@/components/DemandPanel';
 import MarketValidationPanel from '@/components/MarketValidationPanel';
@@ -10,6 +11,8 @@ import MarketFitPanel from '@/components/MarketFitPanel';
 import TikTokPanel from '@/components/TikTokPanel';
 import type { CommunitySource, SearchResponse } from '@/lib/types';
 import { filterStores, sortStores, DEFAULT_SORT, type FilterState, type SortKey } from '@/lib/sortFilter';
+
+type ResultsView = 'products' | 'stores';
 
 const RECENT_KEY = 'daed_recent_searches';
 
@@ -48,6 +51,7 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState<SortKey>(DEFAULT_SORT);
   const [filters, setFilters] = useState<FilterState>({ validatedOnly: true });
   const [communitySources, setCommunitySources] = useState<CommunitySource[]>(['reddit', 'hackernews']);
+  const [view, setView] = useState<ResultsView>('products');
   // Gate defaults ON (only stores clearing the 60%/25% relevance bar are
   // returned at all) — this toggle lets you see everything the search
   // found with any real association, unfiltered by that bar.
@@ -258,39 +262,68 @@ export default function Dashboard() {
 
         {!loading && results.length > 0 && (
           <>
-            <SortFilterBar
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              filters={filters}
-              onFiltersChange={setFilters}
-              resultCount={visibleResults.length}
-              totalCount={results.length}
-            />
+            <div className="inline-flex rounded-xl border border-slate-800 bg-slate-900 p-1 mb-4">
+              <button
+                type="button"
+                onClick={() => setView('products')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  view === 'products' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Flame className="h-3.5 w-3.5" />
+                Winning Products
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('stores')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  view === 'stores' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <StoreIcon className="h-3.5 w-3.5" />
+                Stores
+              </button>
+            </div>
 
-            {sortBy === 'recommended' && (
-              <p className="text-[11px] text-slate-600 -mt-3 mb-4">
-                Recommended sorts by each store's Validation Score (the badge on its card) —
-                commercial proof, operational health, traffic & authority, catalog investment, and
-                replicability combined. Relevance to your search already passed as a gate before a
-                store was ranked at all, so it's not part of this score.
-              </p>
-            )}
-
-            {visibleResults.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">
-                <p className="text-sm text-slate-400 mb-1">No stores match these filters.</p>
-                <p className="text-xs text-slate-600">
-                  {filters.validatedOnly
-                    ? 'Try turning off "Validated only" to see every relevant store, even ones without strong sales evidence yet.'
-                    : 'Try widening your price or product-count range.'}
-                </p>
-              </div>
+            {view === 'products' ? (
+              <WinningProductsFeed products={data!.winningProducts} niche={data!.niche} />
             ) : (
-              <div className="grid gap-4">
-                {visibleResults.map((store) => (
-                  <StoreCard key={store.domain} store={store} niche={data!.niche} />
-                ))}
-              </div>
+              <>
+                <SortFilterBar
+                  sortBy={sortBy}
+                  onSortChange={setSortBy}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  resultCount={visibleResults.length}
+                  totalCount={results.length}
+                />
+
+                {sortBy === 'recommended' && (
+                  <p className="text-[11px] text-slate-600 -mt-3 mb-4">
+                    Recommended sorts by each store's Validation Score (the badge on its card) —
+                    commercial proof, operational health, traffic & authority, catalog investment,
+                    and replicability combined. Relevance to your search already passed as a gate
+                    before a store was ranked at all, so it's not part of this score.
+                  </p>
+                )}
+
+                {visibleResults.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center">
+                    <p className="text-sm text-slate-400 mb-1">No stores match these filters.</p>
+                    <p className="text-xs text-slate-600">
+                      {filters.validatedOnly
+                        ? 'Try turning off "Validated only" to see every relevant store, even ones without strong sales evidence yet.'
+                        : 'Try widening your price or product-count range.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {visibleResults.map((store) => (
+                      <StoreCard key={store.domain} store={store} niche={data!.niche} />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             <p className="text-[11px] text-slate-600 mt-6">

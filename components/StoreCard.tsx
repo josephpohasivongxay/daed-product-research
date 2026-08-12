@@ -26,7 +26,9 @@ import {
   formatRevenueRange,
   formatTrafficRange,
   formatPlatformLabel,
+  formatDuration,
 } from '@/lib/format';
+import { computeAdMomentumLabel, AD_MOMENTUM_BADGE_STYLE } from '@/lib/adMomentum';
 
 const SCORE_COLOR = (total: number) => {
   if (total >= 75) return 'text-emerald-400 border-emerald-900 bg-emerald-950/40';
@@ -42,6 +44,7 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
       ? `${store.productsSample}+ products`
       : `${store.productsSample} product${store.productsSample === 1 ? '' : 's'}`
     : 'Limited data';
+  const adMomentum = computeAdMomentumLabel(store.metaAdSummary);
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
@@ -67,6 +70,21 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
           <div className="text-[9px] uppercase tracking-wide opacity-80">/100</div>
         </div>
       </div>
+
+      {adMomentum && (
+        <div className="mb-3">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${AD_MOMENTUM_BADGE_STYLE[adMomentum]}`}
+            title="Derived from this store's active Meta/Facebook ads (count + longest-running days) — a display signal, not folded into the Validation Score"
+          >
+            <Megaphone className="h-3.5 w-3.5" />
+            {adMomentum} · {store.metaAdSummary!.activeCount} active ad
+            {store.metaAdSummary!.activeCount === 1 ? '' : 's'}
+            {store.metaAdSummary!.longestRunningDays !== null &&
+              ` · ${formatDuration(store.metaAdSummary!.longestRunningDays)} longest-running`}
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4 text-xs text-slate-400">
         {store.priceStats && (
@@ -141,13 +159,13 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
             {formatRank(store.popularity.trancoRank)}
           </span>
         )}
-        {store.paidTrafficIndicator !== null && (
+        {store.paidTrafficIndicator === false && (
           <span
             className="inline-flex items-center gap-1"
-            title="Display flag from Meta's Ad Library — whether visibility looks organic or ad-driven"
+            title="Checked against Meta's Ad Library — no active ads found"
           >
             <Megaphone className="h-3.5 w-3.5 text-slate-600" />
-            {store.paidTrafficIndicator ? 'Paid ads detected' : 'No paid ads detected'}
+            No paid ads detected
           </span>
         )}
       </div>
@@ -156,7 +174,7 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {store.sampleProducts.map((p, idx) => (
             <div key={idx} className="rounded-xl border border-slate-800 bg-slate-950/50 p-2">
-              <div className="aspect-square w-full overflow-hidden rounded-lg bg-slate-800 mb-2">
+              <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-800 mb-2">
                 {p.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -170,9 +188,22 @@ export default function StoreCard({ store, niche }: { store: StoreResult; niche:
                     No image
                   </div>
                 )}
+                {p.isBestseller && (
+                  <span
+                    className="absolute top-1 right-1 inline-flex items-center gap-0.5 rounded-full border border-amber-800 bg-amber-950/80 px-1.5 py-0.5 text-[9px] text-amber-300"
+                    title="Appears in this store's own best-sellers collection"
+                  >
+                    <Star className="h-2.5 w-2.5" />
+                  </span>
+                )}
               </div>
               <p className="text-xs font-medium text-slate-200 truncate">{p.title}</p>
-              <p className="text-xs text-slate-500">${p.price}</p>
+              <p className="text-xs text-slate-500">
+                ${p.price}
+                {p.soldOutRatio !== null && p.soldOutRatio > 0 && (
+                  <span className="text-slate-600"> · {formatPercent(p.soldOutRatio)} sold out</span>
+                )}
+              </p>
             </div>
           ))}
         </div>
