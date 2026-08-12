@@ -48,6 +48,10 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState<SortKey>(DEFAULT_SORT);
   const [filters, setFilters] = useState<FilterState>({ validatedOnly: true });
   const [communitySources, setCommunitySources] = useState<CommunitySource[]>(['reddit', 'hackernews']);
+  // Gate defaults ON (only stores clearing the 60%/25% relevance bar are
+  // returned at all) — this toggle lets you see everything the search
+  // found with any real association, unfiltered by that bar.
+  const [showAllStores, setShowAllStores] = useState(false);
 
   useEffect(() => {
     setRecent(loadRecentSearches());
@@ -59,7 +63,7 @@ export default function Dashboard() {
     );
   }
 
-  async function runSearch(term: string) {
+  async function runSearch(term: string, showAll: boolean = showAllStores) {
     const trimmed = term.trim();
     if (!trimmed) return;
 
@@ -70,7 +74,11 @@ export default function Dashboard() {
     setFilters({ validatedOnly: true });
 
     try {
-      const params = new URLSearchParams({ niche: trimmed, community: communitySources.join(',') });
+      const params = new URLSearchParams({
+        niche: trimmed,
+        community: communitySources.join(','),
+        gate: showAll ? 'off' : 'on',
+      });
       const res = await fetch(`/api/search?${params.toString()}`);
       const json = await res.json();
 
@@ -92,6 +100,16 @@ export default function Dashboard() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     runSearch(niche);
+  }
+
+  function handleShowAllToggle(checked: boolean) {
+    setShowAllStores(checked);
+    // Which stores even qualify for the catalog is decided server-side, so
+    // toggling this re-runs the current search rather than just re-filtering
+    // client-side — but only if a search has already completed.
+    if (hasSearched && niche.trim()) {
+      runSearch(niche, checked);
+    }
   }
 
   const results = data?.results || [];
@@ -157,6 +175,19 @@ export default function Dashboard() {
             })}
           </div>
 
+          <label
+            className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-500"
+            title="On by default: only stores clearing a 60% (Shopify) / 25% (homepage-only) relevance bar are included at all. Check this to see every store with any detected association instead."
+          >
+            <input
+              type="checkbox"
+              checked={showAllStores}
+              onChange={(e) => handleShowAllToggle(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-950 accent-brand-600"
+            />
+            Show every associated store (skip relevance gate)
+          </label>
+
           {recent.length > 0 && (
             <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-none">
               {recent.map((term) => (
@@ -187,6 +218,9 @@ export default function Dashboard() {
           <p className="text-xs text-slate-500 mb-4">
             {SOURCE_LABEL[data.source]} · scanned {data.candidatesScanned} candidate
             {data.candidatesScanned === 1 ? '' : 's'} for &ldquo;{data.niche}&rdquo;
+            {!data.relevanceGateApplied && (
+              <span className="text-amber-500"> · relevance gate off — includes weak matches</span>
+            )}
           </p>
         )}
 

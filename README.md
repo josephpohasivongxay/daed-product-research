@@ -27,11 +27,14 @@ weight than any single number.
    product/price/review extraction is Shopify-only).
 4. Within each store's catalog, products are **scored for relevance** to the searched niche
    (title/type/tags/description matching) — a store that sells 200 unrelated products and
-   mentions the niche once won't outrank one whose catalog is built around it. A store only
-   enters the catalog at all once its relevance clears a **gate** (60% for a full Shopify catalog
-   match, or a proportional 25% for the thinner homepage-only read non-Shopify stores get) —
-   above that bar, relevance has no further effect on rank; it's a pass/fail filter, not part of
-   the score. See "The Store Validation Score" below for why.
+   mentions the niche once won't outrank one whose catalog is built around it. By default, a
+   store only enters the catalog at all once its relevance clears a **gate** (60% for a full
+   Shopify catalog match, or a proportional 25% for the thinner homepage-only read non-Shopify
+   stores get) — above that bar, relevance has no further effect on rank; it's a pass/fail filter,
+   not part of the score. The **"Show every associated store" checkbox** next to the search bar
+   turns this gate off for a search — it still requires *some* detected association (this isn't
+   "show random domains"), just not the full 60%/25% bar, so you can see the long tail of weak
+   matches the gate normally hides. See "The Store Validation Score" below for why the gate exists.
 5. Each store is enriched with domain age (RDAP/Wayback), popularity (Tranco rank), review
    evidence pulled directly from its own product pages (JSON-LD, with a widget-embed fallback —
    never search-based), inventory-depletion and sales-signal proxies (bestseller-collection
@@ -125,6 +128,13 @@ homepage-only relevance read is capped at 40 to begin with, since it's much thin
 a whole product catalog — see `lib/relevance.ts`). Above its threshold, relevance has zero further
 effect on rank. This replaced an earlier version where relevance was itself a scored category —
 that conflated "is this on-topic" (a filter) with "is this validated" (the actual question).
+
+**The gate is on by default but optional** — `?gate=off` on `/api/search` (wired to the "Show
+every associated store" checkbox in the UI) skips the 60%/25% threshold while still requiring
+`relevancePercent > 0` (some real detected association), so you can see the weaker matches the
+gate normally excludes without opening the door to unrelated domains. The response's
+`relevanceGateApplied` field reports which mode produced the results shown, and the UI surfaces
+that as a note under the scanned-candidate count when it's off.
 
 ### Step 2 — Score (100 points)
 

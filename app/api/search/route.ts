@@ -34,10 +34,19 @@ function parseCommunitySources(raw: string | null): CommunitySource[] {
   return ALL_COMMUNITY_SOURCES.filter((source) => requested.includes(source));
 }
 
+const GATE_OFF_VALUES = new Set(['off', '0', 'false']);
+
+/** Defaults on — only an explicit ?gate=off (or 0/false) disables the relevance gate. */
+function parseGateEnabled(raw: string | null): boolean {
+  if (raw === null) return true;
+  return !GATE_OFF_VALUES.has(raw.trim().toLowerCase());
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const niche = searchParams.get('niche')?.trim();
   const communitySources = parseCommunitySources(searchParams.get('community'));
+  const gateEnabled = parseGateEnabled(searchParams.get('gate'));
 
   if (!niche) {
     return NextResponse.json({ error: 'Niche keyword is required' }, { status: 400 });
@@ -59,10 +68,14 @@ export async function GET(request: Request) {
       if (check.status !== 'fulfilled') continue;
       const { store, platform } = check.value;
       platformBreakdown[platform] = (platformBreakdown[platform] ?? 0) + 1;
-      // Relevance is a pass/fail gate (lib/relevance.ts), not a score
-      // component: a store has to clear it to be ranked at all, but
-      // clearing it by a little vs. a lot makes no further difference.
-      if (store && passesRelevanceGate(store.platform === 'shopify', store.relevancePercent)) {
+      // Relevance is a pass/fail gate (lib/relevance.ts) by default — a
+      // store has to clear it to be ranked at all, but clearing it by a
+      // little vs. a lot makes no further difference. ?gate=off drops the
+      // 60%/25% threshold but still requires SOME detected association
+      // (relevancePercent > 0) — "show everything," not "show noise."
+      if (!store || store.relevancePercent <= 0) continue;
+      const passes = gateEnabled ? passesRelevanceGate(store.platform === 'shopify', store.relevancePercent) : true;
+      if (passes) {
         results.push(store);
       }
     }
@@ -107,6 +120,7 @@ export async function GET(request: Request) {
       niche,
       source,
       candidatesScanned: domains.length,
+      relevanceGateApplied: gateEnabled,
       results,
       demand,
       market: { score: marketScore, evidence, verdict, pricingGap, commonAngles },

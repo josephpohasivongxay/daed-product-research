@@ -295,6 +295,8 @@ export type SearchResponse = {
   niche: string;
   source: 'tavily';
   candidatesScanned: number;
+  /** False when this search was run with the relevance gate off (?gate=off) — results may include weak matches that would normally be filtered out. */
+  relevanceGateApplied: boolean;
   results: StoreResult[];
   demand: DemandSignal;
   market: MarketValidation;
